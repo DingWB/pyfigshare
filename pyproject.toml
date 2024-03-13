@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
-write_to = 'pyfigshare/_version.py'
+write_to = 'src/_version.py'
 
 [project]
 name = "pyfigshare"
