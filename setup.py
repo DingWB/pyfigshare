@@ -32,7 +32,7 @@ setup(
 	entry_points={
 			'console_scripts':
 				[
-					'figshare=pyfigshare.__init__:main',
+					'figshare=pyfigshare:main',
 				],
 		},
 )
