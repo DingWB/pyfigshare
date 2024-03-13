@@ -1,6 +1,7 @@
 import os,sys
 import fire
-from .figshare import Figshare,upload,get_filenames,download
+from .figshare import (Figshare,upload,get_filenames,download
+					   )
 from ._version import version as __version__
 
 def main():
