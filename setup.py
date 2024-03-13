@@ -21,10 +21,14 @@ setup(
     author="Wubin Ding",
     author_email="ding.wu.bin.gm@gmail.com",
     url="https://github.com/DingWB/pyfigshare",
-    packages=['pyfigshare'],  # pyfigshare
+    # packages=['pyfigshare'],  # pyfigshare
 	# package_dir={'': 'pyfigshare'},
+	packages=find_packages(exclude=('docs',)),
 	install_requires=['fire','pandas','requests'],
-    include_package_data=True,
+	include_package_data=True,
+	package_data={
+		'': ['*.txt', '*.tsv', '*.csv', '*ipynb']
+	},
 	entry_points={
 			'console_scripts':
 				[
