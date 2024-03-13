@@ -24,7 +24,7 @@ setup(
     # packages=['pyfigshare'],  # pyfigshare
 	# package_dir={'': 'pyfigshare'},
 	packages=find_packages(exclude=('docs',)),
-	install_requires=['fire','pandas','requests'],
+	install_requires=['fire','pandas','requests',"setuptools_scm[toml]>=6.2"],
 	include_package_data=True,
 	package_data={
 		'': ['*.txt', '*.tsv', '*.csv', '*ipynb']
@@ -32,7 +32,7 @@ setup(
 	entry_points={
 			'console_scripts':
 				[
-					'figshare=pyfigshare:main',
+					'figshare=pyfigshare.__init__:main',
 				],
 		},
 )
