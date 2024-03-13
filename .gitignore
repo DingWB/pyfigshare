@@ -3,4 +3,4 @@
 /notebooks/*.pdf
 /dist/
 /.idea/
-pyfigshare/_version.py
+/pyfigshare/_version.py
