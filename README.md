@@ -1,5 +1,6 @@
 # Installation
 pip install git+https://github.com/DingWB/pyfigshare.git
+
 # or
 pip install pyfigshare
 
