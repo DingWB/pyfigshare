@@ -4,10 +4,7 @@ Created on Thu may 5 11:27:17 2022
 
 @author: DingWB
 """
-try:
-    from setuptools import setup, find_packages
-except ImportError:
-    from distutils.core import setup, find_packages
+from setuptools import setup, find_packages
 from pathlib import Path
 
 this_directory = Path(__file__).parent
@@ -23,16 +20,20 @@ setup(
     url="https://github.com/DingWB/pyfigshare",
     # packages=['pyfigshare'],  # pyfigshare
 	# package_dir={'': 'pyfigshare'},
+	license='MIT',
+    classifiers=[
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
+    ],
 	packages=find_packages(exclude=('docs',)),
-	install_requires=['fire','pandas','requests',"setuptools_scm[toml]>=6.2"],
+	install_requires=['fire','pandas','requests'],
 	include_package_data=True,
 	package_data={
 		'': ['*.txt', '*.tsv', '*.csv', '*ipynb']
 	},
 	entry_points={
 			'console_scripts':
-				[
-					'figshare=pyfigshare:main',
-				],
-		},
+				['figshare=pyfigshare:main',],
+	},
 )
