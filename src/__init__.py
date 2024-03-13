@@ -8,6 +8,8 @@ def main():
         {
             "upload": upload,
             'Figshare': Figshare,
+			'download':download,
+			'get_filenames':get_filenames,
         }
 	)
 
