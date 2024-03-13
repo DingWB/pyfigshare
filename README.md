@@ -45,3 +45,7 @@ FLAGS
 
 ```
 
+# More informations
+pip install git+https://github.com/cognoma/figshare.git
+https://help.figshare.com/article/how-to-use-the-figshare-api
+https://colab.research.google.com/drive/13CAM8mL1u7ZsqNhfZLv7bNb1rdhMI64d?usp=sharing#scrollTo=affected-source

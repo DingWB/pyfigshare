@@ -14,54 +14,19 @@ import pandas as pd
 from urllib.request import urlretrieve
 import fire
 class Figshare:
-	""" A Python interface to Figshare
-	# Docu
-	# pip install git+https://github.com/cognoma/figshare.git
-	# https://help.figshare.com/article/how-to-use-the-figshare-api
-	# https://colab.research.google.com/drive/13CAM8mL1u7ZsqNhfZLv7bNb1rdhMI64d?usp=sharing#scrollTo=affected-source
-
-	Attributes
-	----------
-	baseurl : str
-		Base URL of the Figshare v2 API
-
-	token : str
-		The Figshare OAuth2 authentication token
-
-	private : bool
-		Boolean to check whether connection is to a private or public article
-
-	Methods
-	-------
-	endpoint(link)
-		Concatenate the endpoint to the baseurl
-
-	get_headers()
-		Return the HTTP header string
-
-	create_article()
-		Create a new figshare article
-
-	update_article(article_id)
-		Update existing article
-
-	get_article(article_id, version)
-		Get some information about a article
-
-	list_article_versions(article_id)
-		List versions of the given article
-
-	list_files(article_id, version)
-		List files within a given article
-
-	get_file_details(article_id, file_id)
-		Print file details
-
-	retrieve_files_from_article(article_id)
-		Retrieve files and save them locally.
-
-	"""
 	def __init__(self, token=None, private=True):
+		"""
+		figshare class
+
+		Parameters
+		----------
+		token : str
+			if token has already been written to ~/.figshare/token,
+			this parameter can be ignored.
+		private : bool
+			whether to read or write private article, set to False if downloading
+			public articles.
+		"""
 		self.baseurl = "https://api.figshare.com/v2/{endpoint}'"
 		self.token_path=os.path.expanduser("~/.figshare/token")
 		if token is None:
@@ -298,7 +263,7 @@ class Figshare:
 		return result
 
 	def delete_articles_with_title(self, title):
-		articles=self.search_articles(title)
+		articles=self.search_articles(title=title)
 		for article in articles:
 			self.delete_article(article['id'])
 
@@ -445,7 +410,7 @@ class Figshare:
 
 def upload(
 	input_path="./",
-	dataset_title='title', description='description',
+	title='title', description='description',
 	token=None,output="figshare.tsv",rewrite=False,
 	threshold=15):
 	input_path = os.path.abspath(os.path.expanduser(input_path))
@@ -456,10 +421,10 @@ def upload(
 	else:
 		input_files=[input_path]
 	fs = Figshare(token=token)
-	r = fs.search_articles(dataset_title)
+	r = fs.search_articles(title=title)
 	if len(r) == 0:
-		print(f"article: {dataset_title} not found, create it")
-		aid = fs.create_article(title=dataset_title, description=description)
+		print(f"article: {title} not found, create it")
+		aid = fs.create_article(title=title, description=description)
 	else:
 		print(f"found existed article")
 		aid = r[0]['id'] #article id
