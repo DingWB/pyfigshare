@@ -1,0 +1,5 @@
+**/.DS_Store
+/PyComplexHeatmap.egg-info/
+/notebooks/.ipynb_checkpoints/
+/notebooks/*.pdf
+/dist/

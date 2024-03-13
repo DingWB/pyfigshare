@@ -1,0 +1,35 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu may 5 11:27:17 2022
+
+@author: DingWB
+"""
+
+try:
+    from setuptools import setup, find_packages
+except ImportError:
+    from distutils.core import setup, find_packages
+
+from pathlib import Path
+
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
+
+setup(
+    name="pyfigshare",
+	use_scm_version=True,  # {'version_scheme': 'python-simplified-semver',"local_scheme": "no-local-version"},
+	setup_requires=['setuptools_scm'],
+    description="A Python package to interact with figshare",
+    author="Wubin Ding",
+    author_email="ding.wu.bin.gm@gmail.com",
+    url="https://github.com/DingWB/pyfigshare",
+    packages=["src"],  # pyfigshare
+	install_requires=['fire','pandas','requests'],
+    include_package_data=True,
+	entry_points={
+			'console_scripts':
+				[
+					'fs=pyfigshare:main',
+				],
+		},
+)
