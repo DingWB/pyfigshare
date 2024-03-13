@@ -50,7 +50,7 @@ figshare upload -i test_data/ --title test1
 # upload folder test_data onto figshare and give a title "test1"
 ```
 
-## (3) Get private or public article ifnormation 
+## (3) Get private or public article information 
 ### List private or public article file names
 ```shell
 figshare get_filenames 9273710
@@ -151,6 +151,11 @@ figshare Figshare --private True delete_article <article_id>
 ### delete article with given title
 ```shell
 figshare Figshare --private True delete_articles_with_title test1
+```
+
+## (4) download all files for a given article id
+```shell
+figshare download 9273710 -o downlnoaded_data
 ```
 
 ## Other functions
