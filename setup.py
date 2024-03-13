@@ -21,8 +21,8 @@ setup(
     author="Wubin Ding",
     author_email="ding.wu.bin.gm@gmail.com",
     url="https://github.com/DingWB/pyfigshare",
-    packages=find_packages(where='src'),  # pyfigshare
-	package_dir={'': 'src'},
+    packages=['pyfigshare'],  # pyfigshare
+	# package_dir={'': 'pyfigshare'},
 	install_requires=['fire','pandas','requests'],
     include_package_data=True,
 	entry_points={
