@@ -1,5 +1,6 @@
+import os,sys
 import fire
-from .figshare import *
+from .figshare import Figshare,upload,get_filenames,download
 from ._version import version as __version__
 
 def main():
@@ -13,5 +14,5 @@ def main():
         }
 	)
 
-if __name__=="_main__":
+if __name__=="__main__":
     main()
