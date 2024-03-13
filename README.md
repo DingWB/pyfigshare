@@ -26,7 +26,7 @@ SYNOPSIS
 FLAGS
     -i, --input_path=INPUT_PATH
         Default: './'
-    --dataset_title=DATASET_TITLE
+    --title=DATASET_TITLE
         Default: 'title'
     --description=DESCRIPTION
         Default: 'description'

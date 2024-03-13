@@ -413,6 +413,35 @@ def upload(
 	title='title', description='description',
 	token=None,output="figshare.tsv",rewrite=False,
 	threshold=15):
+	"""
+	Upload files or directory to figshare
+
+	Parameters
+	----------
+	input_path : str
+		folder name, or single file path, or file pattern passed to glob (should be
+		quote using "", and * must be included).
+	title : str
+		article title, if not existed this article, it will be created.
+	description : str
+		article description.
+	token : str
+		If ~/.figshare/token existed, this paramter can be ignored.
+	output : path
+		After the uploading is finished, the file id,url and filename will be
+		written into this output file.
+	rewrite : bool
+		whether to overwrite the files on figshare if existed.
+	threshold : int [GB]
+		There is only 20 GB availabel for private storage, when uploading a
+		big datasets (>20Gb), if the total quota usage is grater than  this
+		threshold, the article will be published so that the 20GB usaged quata
+		will be reset to 0.
+
+	Returns
+	-------
+
+	"""
 	input_path = os.path.abspath(os.path.expanduser(input_path))
 	if "*" not in input_path and os.path.isdir(input_path):
 		input_files=[os.path.join(input_path,file) for file in os.listdir(input_path)]
@@ -449,10 +478,27 @@ def upload(
 	print(f"See {output} for the detail information of the uploaded files")
 
 def get_filenames(article_id,private=False,output="figshare.tsv"):
+	"""
+	Get all files id, url and filenames for a given article id.
+
+	Parameters
+	----------
+	article_id : int
+		figshare article id, for example, article id for this public article:
+		https://figshare.com/articles/dataset/9273710 is 9273710.
+	private : bool
+		whether this is a private article or not.
+	output : path
+		write the filenames, url and file id into this output.
+
+	Returns
+	-------
+
+	"""
 	fs = Figshare(private=private)
 	# fs.get_article(article_id) #article_id=9273710
 	# generating the mapping file from file id to file name
-	res = fs.list_files(article_id, show=False)
+	res = fs.list_files(article_id)
 	R = []
 	for r in res:
 		url = "https://figshare.com/ndownloader/files/" + str(r['id'])
@@ -461,6 +507,23 @@ def get_filenames(article_id,private=False,output="figshare.tsv"):
 	df.to_csv(output, sep='\t', index=False)
 
 def download(article_id,private=False, outdir="./"):
+	"""
+	Download all files for a given figshare article id
+
+	Parameters
+	----------
+	article_id : int
+		figshare article id, for example, article id for this public article:
+		https://figshare.com/articles/dataset/9273710 is 9273710.
+	private : bool
+		whether this is a private article or not.
+	outdir : path
+		whether to store the downloaded files.
+
+	Returns
+	-------
+
+	"""
 	fs = Figshare(private=private)
 	fs.download_article(article_id, outdir=outdir)
 
