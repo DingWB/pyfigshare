@@ -8,7 +8,6 @@ try:
     from setuptools import setup, find_packages
 except ImportError:
     from distutils.core import setup, find_packages
-
 from pathlib import Path
 
 this_directory = Path(__file__).parent
@@ -22,7 +21,8 @@ setup(
     author="Wubin Ding",
     author_email="ding.wu.bin.gm@gmail.com",
     url="https://github.com/DingWB/pyfigshare",
-    packages=["src"],  # pyfigshare
+    packages=find_packages(where='src'),  # pyfigshare
+	package_dir={'': 'src'},
 	install_requires=['fire','pandas','requests'],
     include_package_data=True,
 	entry_points={
