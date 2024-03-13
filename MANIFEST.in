@@ -1,5 +1,5 @@
 include *.py
 recursive-include notebooks *.ipynb 
-prune data 
+prune .idea
 prune docs
 prune notebooks
