@@ -6,26 +6,26 @@ build-backend = "setuptools.build_meta"
 version_scheme = "guess-next-dev"
 write_to = 'pyfigshare/_version.py'
 
-[project]
-name = "pyfigshare"
-dynamic = ["version","scripts","entry-points"]
-authors = [
-  { name="Wubin Ding", email="ding.wu.bin.gm@gmail.com" },
-]
-description = "A python package to interact with figshare"
-keywords = ["pyfigshare", "figshare"]
-readme = "README.md"
-requires-python = ">=3.0"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
-license = {file = "LICENSE"}
-
-[project.urls]
-"Homepage" = "https://github.com/DingWB/pyfigshare"
-repository = "https://github.com/DingWB/pyfigshare"
-"Bug Tracker" = "https://github.com/DingWB/pyfigshare/issues"
-documentation = "https://dingwb.github.io/pyfigshare"
+#[project]
+#name = "pyfigshare"
+#dynamic = ["version","scripts","entry-points"]
+#authors = [
+#  { name="Wubin Ding", email="ding.wu.bin.gm@gmail.com" },
+#]
+#description = "A python package to interact with figshare"
+#keywords = ["pyfigshare", "figshare"]
+#readme = "README.md"
+#requires-python = ">=3.0"
+#classifiers = [
+#    "Programming Language :: Python :: 3",
+#    "License :: OSI Approved :: MIT License",
+#    "Operating System :: OS Independent",
+#]
+#license = {file = "LICENSE"}
+#
+#[project.urls]
+#"Homepage" = "https://github.com/DingWB/pyfigshare"
+#repository = "https://github.com/DingWB/pyfigshare"
+#"Bug Tracker" = "https://github.com/DingWB/pyfigshare/issues"
+#documentation = "https://dingwb.github.io/pyfigshare"
 
