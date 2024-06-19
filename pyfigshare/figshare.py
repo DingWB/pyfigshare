@@ -12,6 +12,7 @@ import os,sys
 import pandas as pd
 from urllib.request import urlretrieve
 import fire
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from loguru import logger
 logger.level = "INFO"
@@ -21,7 +22,8 @@ def download_worker(url,path):
 	return path
 
 class Figshare:
-	def __init__(self, token=None, private=True,chunk_size=20):
+	def __init__(self, token=None, private=True,
+				 chunk_size=20,threshold=18):
 		"""
 		figshare class
 
@@ -53,6 +55,7 @@ class Figshare:
 					f.write(token)
 		self.private = private
 		self.chunk_size=chunk_size*1024*1024
+		self.threshold=threshold
 		self.value_attrs = ['title', 'description', 'is_metadata_record', 'metadata_reason',
 					   'defined_type', 'funding', 'license', 'doi', 'handle', 'resource_doi',
 					   'resource_title', 'group_id']
@@ -62,6 +65,7 @@ class Figshare:
 		self.dict_attrs = ['custom_fields', 'timeline']
 		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
 		logger.info(f"chunk_size: {chunk_size} MB")
+		self.max_quota=20
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
 		headers = {'Authorization': 'token ' + self.token}
@@ -386,6 +390,14 @@ class Figshare:
 		endpoint = 'account/articles/{}/files'
 		endpoint = endpoint.format(article_id)
 		md5, size = self.get_file_check_data(file_path)
+		# check whether there is enough quota before initiating new upload
+		quota_used=self.get_used_quota_private()
+		if quota_used > self.threshold or quota_used+size/1024/1024/1024 > self.max_quota:
+			logger.info(f"used quota is {used_quota}, try to publish article.")
+			try:
+				self.publish(article_id) # publish article
+			except:
+				looger.warning("Failed to publish, please publish manually")
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		# logger.info('Initiated file upload:', result['location'], '\n')
@@ -521,7 +533,7 @@ def upload(input_path="./",
 		input_files=glob.glob(input_path)
 	else:
 		input_files=[input_path]
-	fs = Figshare(token=token,chunk_size=chunk_size)
+	fs = Figshare(token=token,chunk_size=chunk_size,threshold=threshold)
 	r = fs.search_articles(title=title)
 	if len(r) == 0:
 		logger.info(f"article: {title} not found, create it")
@@ -532,12 +544,6 @@ def upload(input_path="./",
 
 	for file_path in input_files:
 		fs.upload(aid, file_path)
-		if fs.get_used_quota_private() > threshold:
-			logger.info(f"used quota is {used_quota} > {threshold} GB, try to publish article.")
-			try:
-				fs.publish(aid)
-			except:
-				pass
 	get_filenames(aid, private=True, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
