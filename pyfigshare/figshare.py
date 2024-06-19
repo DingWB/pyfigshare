@@ -513,7 +513,7 @@ def upload(
 		aid = r[0]['id'] #article id
 
 	res = fs.list_files(aid,show=False)
-	existed_files=[os.path.basename(r['name']) for r in res]
+	existed_files=[r['name'] for r in res]
 	used_quota = fs.get_used_quota_private()
 	for file_path in input_files:
 		file=os.path.basename(file_path)
