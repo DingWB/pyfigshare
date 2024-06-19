@@ -393,7 +393,7 @@ class Figshare:
 		# check whether there is enough quota before initiating new upload
 		quota_used=self.get_used_quota_private()
 		if quota_used > self.threshold or quota_used+size/1024/1024/1024 > self.max_quota:
-			logger.info(f"used quota is {used_quota}, try to publish article.")
+			logger.info(f"used quota is {quota_used}, try to publish article.")
 			try:
 				self.publish(article_id) # publish article
 			except:
