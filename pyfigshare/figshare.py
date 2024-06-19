@@ -395,9 +395,10 @@ class Figshare:
 		if quota_used > self.threshold or quota_used+size/1024/1024/1024 > self.max_quota:
 			logger.info(f"used quota is {quota_used}, try to publish article.")
 			try:
-				self.publish(article_id) # publish article
+				result=self.publish(article_id) # publish article
 			except:
 				logger.warning("Failed to publish, please publish manually")
+				print(result)
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		# logger.info('Initiated file upload:', result['location'], '\n')
