@@ -442,6 +442,7 @@ class Figshare:
 	def upload(self,article_id, file_path):
 		res = self.list_files(article_id, show=False)
 		self.existed_files = [r['name'] for r in res]
+		logger.debug(self.existed_files)
 		if os.path.isdir(file_path):
 			logger.debug(f"dir: {file_path}")
 			# assert os.path.isdir(file_path), 'file_path must be a folder'
