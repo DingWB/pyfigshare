@@ -416,7 +416,7 @@ class Figshare:
 		# Then we upload the file.
 		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		if file_info is None:
-			logger.warning(f"Skipped uploading, file existed: {file_path}")
+			logger.info(f"Skipped uploading, file existed: {file_path}")
 			return None
 		# Until here we used the figshare API; following lines use the figshare upload service API.
 		self.upload_parts(file_path,file_info)
@@ -479,7 +479,7 @@ def upload(
 	input_path="./",
 	title='title', description='description',
 	token=None,output="figshare.tsv",rewrite=False,
-	threshold=15,chunk_size=20):
+	threshold=15,chunk_size=20,level='INFO'):
 	"""
 	Upload files or directory to figshare
 
@@ -509,6 +509,7 @@ def upload(
 	-------
 
 	"""
+	logger.level = level
 	input_path = os.path.abspath(os.path.expanduser(input_path))
 	if "*" not in input_path and os.path.isdir(input_path):
 		input_files=[os.path.join(input_path,file) for file in os.listdir(input_path)] # including file and folder
