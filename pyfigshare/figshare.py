@@ -14,6 +14,7 @@ from urllib.request import urlretrieve
 import fire
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from loguru import logger
+logger.level = "INFO"
 
 def download_worker(url,path):
 	urlretrieve(url, path)
@@ -475,11 +476,10 @@ class Figshare:
 		result=self.get_account_info()
 		return result['used_quota_private'] / 1024 / 1024 / 1024
 
-def upload(
-	input_path="./",
+def upload(input_path="./",
 	title='title', description='description',
 	token=None,output="figshare.tsv",rewrite=False,
-	threshold=15,chunk_size=20,level='INFO'):
+	threshold=15,chunk_size=20,level='WARNING'):
 	"""
 	Upload files or directory to figshare
 
@@ -504,6 +504,10 @@ def upload(
 		big datasets (>20Gb), if the total quota usage is grater than  this
 		threshold, the article will be published so that the 20GB usaged quata
 		will be reset to 0.
+	chunk_size: int
+		chunk size for uploading [20 MB]
+	level: str
+		loguru log level: DEBUG, INFO, WARNING, ERROR
 
 	Returns
 	-------
