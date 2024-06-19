@@ -9,7 +9,7 @@ write_to = 'pyfigshare/_version.py'
 [project]
 name = "pyfigshare"
 dynamic = ["version"] #"scripts","entry-points"
-dependencies=['fire','pandas','requests']
+dependencies=['fire','pandas','requests','loguru']
 authors = [
   { name="Wubin Ding", email="ding.wu.bin.gm@gmail.com" },
 ]
