@@ -436,9 +436,14 @@ class Figshare:
 
 	def upload(self,article_id, file_path):
 		if os.path.isdir(file_path):
-			self.upload_folder(article_id, file_path)
-		else: #file
-			self.upload_file(article_id, file_path)
+			logger.debug(f"dir: {file_path}")
+			assert os.path.isdir(file_path), 'file_path must be a folder'
+			# self.upload_folder(article_id, file_path)
+		elif os.path.isfile(file_path): #file
+			# self.upload_file(article_id, file_path)
+			logger.debug(f"file: {file_path}")
+		else:
+			logger.warning(f"{file_path} is not dir, neither file, not recognized")
 
 	def publish(self,article_id):
 		endpoint = '/account/articles/{}/publish'.format(article_id)
