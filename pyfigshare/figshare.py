@@ -530,10 +530,9 @@ def upload(input_path="./",
 		logger.info(f"found existed article")
 		aid = r[0]['id'] #article id
 
-	used_quota = fs.get_used_quota_private()
 	for file_path in input_files:
 		fs.upload(aid, file_path)
-		if used_quota > threshold:
+		if fs.get_used_quota_private() > threshold:
 			logger.info(f"used quota is {used_quota} > {threshold} GB, try to publish article.")
 			try:
 				fs.publish(aid)
