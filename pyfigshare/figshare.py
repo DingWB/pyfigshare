@@ -92,11 +92,11 @@ class Figshare:
 				endpoint='/articles/{}/files'.format(article_id)
 			result = self.issue_request('GET', endpoint)
 			if show:
-				print('Listing files for article {}:'.format(article_id))
+				logger.info('Listing files for article {}:'.format(article_id))
 			if result:
 				for item in result:
 					if show:
-						print('  {id} - {name}'.format(**item))
+						logger.info('  {id} - {name}'.format(**item))
 			else:
 				if show:
 					logger.warning('  No files.')
@@ -108,10 +108,10 @@ class Figshare:
 	def list_articles(self,show=False):
 		result = self.issue_request('GET', 'account/articles')
 		if show:
-			print('Listing current articles:')
+			logger.info('Listing current articles:')
 			if result:
 				for item in result:
-					print(u'  {url} - {title}'.format(**item))
+					logger.info(u'  {url} - {title}'.format(**item))
 			else:
 				logger.warning("No articles found.")
 		return result
