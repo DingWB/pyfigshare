@@ -444,11 +444,11 @@ class Figshare:
 		self.existed_files = [r['name'] for r in res]
 		if os.path.isdir(file_path):
 			logger.debug(f"dir: {file_path}")
-			assert os.path.isdir(file_path), 'file_path must be a folder'
-			# self.upload_folder(article_id, file_path)
+			# assert os.path.isdir(file_path), 'file_path must be a folder'
+			self.upload_folder(article_id, file_path)
 		elif os.path.isfile(file_path): #file
-			# self.upload_file(article_id, file_path)
 			logger.debug(f"file: {file_path}")
+			self.upload_file(article_id, file_path)
 		else:
 			logger.warning(f"{file_path} is not dir, neither file, not recognized")
 
