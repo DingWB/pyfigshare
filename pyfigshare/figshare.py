@@ -13,6 +13,7 @@ import pandas as pd
 from urllib.request import urlretrieve
 import fire
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from loguru import logger
 
 def download_worker(url,path):
 	urlretrieve(url, path)
@@ -46,7 +47,7 @@ class Figshare:
 		else:
 			self.token=token
 			if not os.path.exists(self.token_path):
-				print("writing token to ~/.figshare/token")
+				logger.info("writing token to ~/.figshare/token")
 				with open(self.token_path, 'w') as f:
 					f.write(token)
 		self.private = private
@@ -59,6 +60,7 @@ class Figshare:
 					  'custom_fields_list', 'funding_list']
 		self.dict_attrs = ['custom_fields', 'timeline']
 		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
+		logger.info(f"chunk_size: {chunk_size} MB")
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
 		headers = {'Authorization': 'token ' + self.token}
@@ -72,8 +74,8 @@ class Figshare:
 			except ValueError:
 				data = response.content
 		except HTTPError as error:
-			print(error)
-			print('Body:\n', response.content)
+			looger.warning(error)
+			logger.info('Body:\n', response.content)
 			raise
 		return data
 
@@ -97,7 +99,7 @@ class Figshare:
 						print('  {id} - {name}'.format(**item))
 			else:
 				if show:
-					print('  No files.')
+					logger.warning('  No files.')
 			return result
 		else:
 			request = self.get_article(article_id, version)
@@ -111,7 +113,7 @@ class Figshare:
 				for item in result:
 					print(u'  {url} - {title}'.format(**item))
 			else:
-				print("No articles found.")
+				logger.warning("No articles found.")
 		return result
 
 	def search_articles(self,private=None,**kwargs):
@@ -141,7 +143,7 @@ class Figshare:
 				else:
 					invalid_keys.append(key)
 			if len(invalid_keys) > 0:
-				print(f"Those keys were invalid: {invalid_keys} and will be ignored")
+				logger.warning(f"Those keys were invalid: {invalid_keys} and will be ignored")
 			R = self.issue_request('POST', 'articles/search',data=data)
 		return R
 
@@ -248,10 +250,10 @@ class Figshare:
 			else:
 				invalid_keys.append(key)
 		if len(invalid_keys) > 0:
-			print(f"Those keys were invalid: {invalid_keys} and will be ignored")
+			logger.warning(f"Those keys were invalid: {invalid_keys} and will be ignored")
 
 		result = self.issue_request('POST', 'account/articles', data=data)
-		print('Created article:', result['location'], '\n')
+		logger.info('Created article:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
 		return result['id']
 
@@ -359,7 +361,7 @@ class Figshare:
 				for future in as_completed(futures):
 					file_name = futures[future]
 					path = future.result()
-					print(path, end=',')
+					logger.info(path, end=',')
 
 	def get_file_check_data(self, file_name):
 		with open(file_name, 'rb') as fin:
@@ -383,7 +385,7 @@ class Figshare:
 			name=basename
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
-		print('Initiated file upload:', result['location'], '\n')
+		logger.info('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
 		return result
 
@@ -393,7 +395,7 @@ class Figshare:
 	def upload_parts(self, file_path, file_info):
 		url = '{upload_url}'.format(**file_info)
 		result = self.raw_issue_request('GET', url)
-		print('Uploading parts:')
+		# print('Uploading parts:')
 		with open(file_path, 'rb') as fin:
 			for part in result['parts']:
 				self.upload_part(file_info, fin, part)
@@ -405,9 +407,10 @@ class Figshare:
 		stream.seek(part['startOffset'])
 		data = stream.read(part['endOffset'] - part['startOffset'] + 1)
 		self.raw_issue_request('PUT', url, data=data, binary=True)
-		print(' Uploaded part {partNo} from {startOffset} to {endOffset}'.format(**part))
+		# print(' Uploaded part {partNo} from {startOffset} to {endOffset}'.format(**part))
 
 	def upload_file(self,article_id, file_path,folder_name=None):
+		logger.info(file_path)
 		# Then we upload the file.
 		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		# Until here we used the figshare API; following lines use the figshare upload service API.
@@ -423,6 +426,7 @@ class Figshare:
 			cur_folder_name=f"{pre_folder_name}/{folder_name}"
 		else:
 			cur_folder_name=folder_name
+		logger.info(cur_folder_name)
 		for file in os.listdir(file_path):
 			new_file_path=os.path.join(file_path,file)
 			if os.path.isfile(new_file_path):
@@ -502,10 +506,10 @@ def upload(
 	fs = Figshare(token=token,chunk_size=chunk_size)
 	r = fs.search_articles(title=title)
 	if len(r) == 0:
-		print(f"article: {title} not found, create it")
+		logger.info(f"article: {title} not found, create it")
 		aid = fs.create_article(title=title, description=description)
 	else:
-		print(f"found existed article")
+		logger.info(f"found existed article")
 		aid = r[0]['id'] #article id
 
 	res = fs.list_files(aid,show=False)
@@ -514,18 +518,18 @@ def upload(
 	for file_path in input_files:
 		file=os.path.basename(file_path)
 		if file in existed_files and not rewrite:
-			print(f"Skipped existed file: {file}")
+			logger.info(f"Skipped existed file: {file}")
 			continue
-		print(file)
+		logger.info(file)
 		fs.upload(aid, file_path)
 		if used_quota > threshold:
-			print(f"used quota is {used_quota} > {threshold} GB, try to publish article.")
+			logger.info(f"used quota is {used_quota} > {threshold} GB, try to publish article.")
 			try:
 				fs.publish(aid)
 			except:
 				pass
 	get_filenames(aid, private=True, output=os.path.expanduser(output))
-	print(f"See {output} for the detail information of the uploaded files")
+	logger.info(f"See {output} for the detail information of the uploaded files")
 
 def get_filenames(article_id,private=False,output="figshare.tsv"):
 	"""

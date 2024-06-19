@@ -27,7 +27,7 @@ setup(
 		"Programming Language :: Python :: 3.7",
 	],
 	packages=find_packages(exclude=('docs',)),
-	install_requires=['fire','pandas','requests'],
+	install_requires=['fire','pandas','requests','loguru'],
 	include_package_data=True,
 	package_data={
 		'': ['*.txt', '*.tsv', '*.csv', '*ipynb']
