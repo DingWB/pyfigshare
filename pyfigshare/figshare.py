@@ -440,7 +440,7 @@ class Figshare:
 				self.upload_folder(article_id, new_file_path,cur_folder_name)
 
 	def upload(self,article_id, file_path):
-		res = self.list_files(aid, show=False)
+		res = self.list_files(article_id, show=False)
 		self.existed_files = [r['name'] for r in res]
 		if os.path.isdir(file_path):
 			logger.debug(f"dir: {file_path}")
