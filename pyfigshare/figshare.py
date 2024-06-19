@@ -431,7 +431,7 @@ class Figshare:
 		# Then we upload the file.
 		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		if file_info is None:
-			logger.info(f"Skipped uploading, file existed: {file_path}")
+			logger.info(f"File existed, skipped: {file_path}")
 			return None
 		logger.info(file_path)
 		# Until here we used the figshare API; following lines use the figshare upload service API.
