@@ -390,6 +390,8 @@ class Figshare:
 		endpoint = 'account/articles/{}/files'
 		endpoint = endpoint.format(article_id)
 		md5, size = self.get_file_check_data(file_path)
+		if size == 0:
+			return False
 		# check whether there is enough quota before initiating new upload
 		quota_used=self.get_used_quota_private()
 		if quota_used > self.threshold or quota_used+size/1024/1024/1024 > self.max_quota:
@@ -432,6 +434,9 @@ class Figshare:
 		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		if file_info is None:
 			logger.info(f"File existed, skipped: {file_path}")
+			return None
+		if file_info==False:
+			logger.info(f"File size is 0, skipped: {file_path}")
 			return None
 		logger.info(file_path)
 		# Until here we used the figshare API; following lines use the figshare upload service API.
@@ -493,8 +498,8 @@ class Figshare:
 
 def upload(input_path="./",
 	title='title', description='description',
-	token=None,output="figshare.tsv",rewrite=False,
-	threshold=15,chunk_size=20,level='WARNING'):
+	token=None,output="figshare.tsv",
+	threshold=15,chunk_size=20,level='INFO'):
 	"""
 	Upload files or directory to figshare
 
