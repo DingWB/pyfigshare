@@ -3,7 +3,6 @@
 @author: DingWB
 """
 BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
-CHUNK_SIZE = 20971520 #about 20MB
 import hashlib
 import json
 import glob
@@ -20,7 +19,7 @@ def download_worker(url,path):
 	return path
 
 class Figshare:
-	def __init__(self, token=None, private=True):
+	def __init__(self, token=None, private=True,chunk_size=20):
 		"""
 		figshare class
 
@@ -32,6 +31,8 @@ class Figshare:
 		private : bool
 			whether to read or write private article, set to False if downloading
 			public articles.
+		chunk_size: int
+			chunk size for uploading (in Mb), default is 20MB
 		"""
 		self.baseurl = "https://api.figshare.com/v2/{endpoint}'"
 		self.token_path=os.path.expanduser("~/.figshare/token")
@@ -49,6 +50,7 @@ class Figshare:
 				with open(self.token_path, 'w') as f:
 					f.write(token)
 		self.private = private
+		self.chunk_size=chunk_size*1024*1024
 		self.value_attrs = ['title', 'description', 'is_metadata_record', 'metadata_reason',
 					   'defined_type', 'funding', 'license', 'doi', 'handle', 'resource_doi',
 					   'resource_title', 'group_id']
@@ -363,11 +365,11 @@ class Figshare:
 		with open(file_name, 'rb') as fin:
 			md5 = hashlib.md5()
 			size = 0
-			data = fin.read(CHUNK_SIZE)
+			data = fin.read(self.chunk_size)
 			while data:
 				size += len(data)
 				md5.update(data)
-				data = fin.read(CHUNK_SIZE)
+				data = fin.read(self.chunk_size)
 			return md5.hexdigest(), size
 
 	def initiate_new_upload(self, article_id, file_path,folder_name=None):
@@ -460,7 +462,7 @@ def upload(
 	input_path="./",
 	title='title', description='description',
 	token=None,output="figshare.tsv",rewrite=False,
-	threshold=15):
+	threshold=15,chunk_size=20):
 	"""
 	Upload files or directory to figshare
 
@@ -497,7 +499,7 @@ def upload(
 		input_files=glob.glob(input_path)
 	else:
 		input_files=[input_path]
-	fs = Figshare(token=token)
+	fs = Figshare(token=token,chunk_size=chunk_size)
 	r = fs.search_articles(title=title)
 	if len(r) == 0:
 		print(f"article: {title} not found, create it")
