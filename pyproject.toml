@@ -31,5 +31,5 @@ repository = "https://github.com/DingWB/pyfigshare"
 documentation = "https://dingwb.github.io/pyfigshare"
 
 [project.scripts]
-pym3c="pyfigshare:main"
+figshare="pyfigshare:main"
 
