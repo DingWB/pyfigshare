@@ -30,3 +30,6 @@ repository = "https://github.com/DingWB/pyfigshare"
 "Bug Tracker" = "https://github.com/DingWB/pyfigshare/issues"
 documentation = "https://dingwb.github.io/pyfigshare"
 
+[project.scripts]
+pym3c="pyfigshare:main"
+
