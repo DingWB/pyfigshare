@@ -412,12 +412,12 @@ class Figshare:
 		# print(' Uploaded part {partNo} from {startOffset} to {endOffset}'.format(**part))
 
 	def upload_file(self,article_id, file_path,folder_name=None):
-		logger.info(file_path)
 		# Then we upload the file.
 		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		if file_info is None:
 			logger.info(f"Skipped uploading, file existed: {file_path}")
 			return None
+		logger.info(file_path)
 		# Until here we used the figshare API; following lines use the figshare upload service API.
 		self.upload_parts(file_path,file_info)
 		# We return to the figshare API to complete the file upload process.
@@ -425,6 +425,7 @@ class Figshare:
 		# self.list_files(article_id)
 
 	def upload_folder(self,article_id, file_path,pre_folder_name=None): #file_path is a directory
+		logger.debug(f"dir: {file_path}")
 		assert os.path.isdir(file_path), 'file_path must be a folder'
 		folder_name = os.path.basename(file_path)
 		if not pre_folder_name is None:
@@ -436,19 +437,18 @@ class Figshare:
 			new_file_path=os.path.join(file_path,file)
 			if os.path.isfile(new_file_path):
 				self.upload_file(article_id, new_file_path,cur_folder_name)
-			else: # new file path is still a folder, level 2 folder.
+			elif os.path.isdir(new_file_path): # new file path is still a folder, level 2 folder.
 				self.upload_folder(article_id, new_file_path,cur_folder_name)
+			else:
+				logger.warning(f"{new_file_path} is not dir, neither file, not recognized")
 
 	def upload(self,article_id, file_path):
 		res = self.list_files(article_id, show=False)
 		self.existed_files = [r['name'] for r in res]
 		logger.debug(self.existed_files)
 		if os.path.isdir(file_path):
-			logger.debug(f"dir: {file_path}")
-			# assert os.path.isdir(file_path), 'file_path must be a folder'
 			self.upload_folder(article_id, file_path)
 		elif os.path.isfile(file_path): #file
-			logger.debug(f"file: {file_path}")
 			self.upload_file(article_id, file_path)
 		else:
 			logger.warning(f"{file_path} is not dir, neither file, not recognized")
