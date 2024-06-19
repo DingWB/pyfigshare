@@ -348,11 +348,11 @@ class Figshare:
 				data = fin.read(CHUNK_SIZE)
 			return md5.hexdigest(), size
 
-	def initiate_new_upload(self, article_id, file_name):
+	def initiate_new_upload(self, article_id, file_path):
 		endpoint = 'account/articles/{}/files'
 		endpoint = endpoint.format(article_id)
-		md5, size = self.get_file_check_data(file_name)
-		data = {'name': os.path.basename(file_name),'md5': md5,'size': size}
+		md5, size = self.get_file_check_data(file_path)
+		data = {'name': os.path.basename(file_path),'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		print('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
@@ -444,7 +444,7 @@ def upload(
 	"""
 	input_path = os.path.abspath(os.path.expanduser(input_path))
 	if "*" not in input_path and os.path.isdir(input_path):
-		input_files=[os.path.join(input_path,file) for file in os.listdir(input_path)]
+		input_files=[os.path.join(input_path,file) for file in os.listdir(input_path)] # including file and folder
 	elif "*" in input_path:
 		input_files=glob.glob(input_path)
 	else:
