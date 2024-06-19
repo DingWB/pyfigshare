@@ -435,10 +435,10 @@ class Figshare:
 				self.upload_folder(article_id, new_file_path,cur_folder_name)
 
 	def upload(self,article_id, file_path):
-		if os.path.isfile(file_path):
-			self.upload_file(article_id,file_path)
-		else: #folder
-			self.upload_folder(article_id,file_path)
+		if os.path.isdir(file_path):
+			self.upload_folder(article_id, file_path)
+		else: #file
+			self.upload_file(article_id, file_path)
 
 	def publish(self,article_id):
 		endpoint = '/account/articles/{}/publish'.format(article_id)
