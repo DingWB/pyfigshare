@@ -375,14 +375,16 @@ class Figshare:
 			return md5.hexdigest(), size
 
 	def initiate_new_upload(self, article_id, file_path,folder_name=None):
+		basename = os.path.basename(file_path)
+		if not folder_name is None:
+			name = f"{folder_name}/{basename}"
+		else:
+			name = basename
+		if name in self.existed_files:
+			return None
 		endpoint = 'account/articles/{}/files'
 		endpoint = endpoint.format(article_id)
 		md5, size = self.get_file_check_data(file_path)
-		basename=os.path.basename(file_path)
-		if not folder_name is None:
-			name=f"{folder_name}/{basename}"
-		else:
-			name=basename
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		# logger.info('Initiated file upload:', result['location'], '\n')
@@ -413,6 +415,9 @@ class Figshare:
 		logger.info(file_path)
 		# Then we upload the file.
 		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
+		if file_info is None:
+			logger.warning(f"Skipped uploading file existed online: {file_path}")
+			return None
 		# Until here we used the figshare API; following lines use the figshare upload service API.
 		self.upload_parts(file_path,file_info)
 		# We return to the figshare API to complete the file upload process.
@@ -435,6 +440,8 @@ class Figshare:
 				self.upload_folder(article_id, new_file_path,cur_folder_name)
 
 	def upload(self,article_id, file_path):
+		res = self.list_files(aid, show=False)
+		self.existed_files = [r['name'] for r in res]
 		if os.path.isdir(file_path):
 			logger.debug(f"dir: {file_path}")
 			assert os.path.isdir(file_path), 'file_path must be a folder'
@@ -517,15 +524,8 @@ def upload(
 		logger.info(f"found existed article")
 		aid = r[0]['id'] #article id
 
-	res = fs.list_files(aid,show=False)
-	existed_files=[r['name'] for r in res]
 	used_quota = fs.get_used_quota_private()
 	for file_path in input_files:
-		file=os.path.basename(file_path)
-		if file in existed_files and not rewrite:
-			logger.info(f"Skipped existed file: {file}")
-			continue
-		logger.info(file)
 		fs.upload(aid, file_path)
 		if used_quota > threshold:
 			logger.info(f"used quota is {used_quota} > {threshold} GB, try to publish article.")
