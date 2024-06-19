@@ -79,7 +79,7 @@ class Figshare:
 			except ValueError:
 				data = response.content
 		except HTTPError as error:
-			looger.warning(error)
+			logger.warning(error)
 			logger.info('Body:\n', response.content)
 			raise
 		return data
@@ -397,7 +397,7 @@ class Figshare:
 			try:
 				self.publish(article_id) # publish article
 			except:
-				looger.warning("Failed to publish, please publish manually")
+				logger.warning("Failed to publish, please publish manually")
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		# logger.info('Initiated file upload:', result['location'], '\n')
