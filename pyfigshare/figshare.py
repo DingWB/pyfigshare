@@ -385,7 +385,7 @@ class Figshare:
 			name=basename
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
-		logger.info('Initiated file upload:', result['location'], '\n')
+		# logger.info('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
 		return result
 
