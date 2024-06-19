@@ -398,7 +398,7 @@ class Figshare:
 				result=self.publish(article_id) # publish article
 			except:
 				logger.warning("Failed to publish, please publish manually")
-				print(result)
+				print(f"article_id:{article_id}",result)
 		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		# logger.info('Initiated file upload:', result['location'], '\n')
