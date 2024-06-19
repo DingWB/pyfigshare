@@ -13,6 +13,12 @@ import os,sys
 import pandas as pd
 from urllib.request import urlretrieve
 import fire
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+def download_worker(url,path):
+	urlretrieve(url, path)
+	return path
+
 class Figshare:
 	def __init__(self, token=None, private=True):
 		"""
@@ -329,13 +335,29 @@ class Figshare:
 		response = self.issue_request('GET', endpoint)
 		return response
 
-	def download_article(self, article_id, outdir="./"):
+	def download_article(self, article_id, outdir="./",cpu=1):
 		outdir=os.path.abspath(os.path.expanduser(outdir))
 		# Get list of files
 		file_list = self.list_files(article_id,show=False)
 		os.makedirs(outdir, exist_ok=True) # This might require Python >=3.2
-		for file_dict in file_list:
-			urlretrieve(file_dict['download_url'], os.path.join(outdir, file_dict['name']))
+		if cpu==1:
+			for file_dict in file_list:
+				urlretrieve(file_dict['download_url'], os.path.join(outdir, file_dict['name']))
+		else:
+			with ProcessPoolExecutor(cpu) as executor:
+				futures = {}
+				for file_dict in file_list:
+					future = executor.submit(
+						download_worker,
+						url=file_dict['download_url'],
+						path=os.path.join(outdir, file_dict['name'])
+					)
+					futures[future] = file_dict['name']
+
+				for future in as_completed(futures):
+					file_name = futures[future]
+					path = future.result()
+					print(path, end=',')
 
 	def get_file_check_data(self, file_name):
 		with open(file_name, 'rb') as fin:
@@ -348,11 +370,16 @@ class Figshare:
 				data = fin.read(CHUNK_SIZE)
 			return md5.hexdigest(), size
 
-	def initiate_new_upload(self, article_id, file_path):
+	def initiate_new_upload(self, article_id, file_path,folder_name=None):
 		endpoint = 'account/articles/{}/files'
 		endpoint = endpoint.format(article_id)
 		md5, size = self.get_file_check_data(file_path)
-		data = {'name': os.path.basename(file_path),'md5': md5,'size': size}
+		basename=os.path.basename(file_path)
+		if not folder_name is None:
+			name=f"{folder_name}/{basename}"
+		else:
+			name=basename
+		data = {'name':name,'md5': md5,'size': size}
 		result = self.issue_request('POST', endpoint, data=data)
 		print('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
@@ -378,14 +405,34 @@ class Figshare:
 		self.raw_issue_request('PUT', url, data=data, binary=True)
 		print(' Uploaded part {partNo} from {startOffset} to {endOffset}'.format(**part))
 
-	def upload(self,article_id, file_path):
+	def upload_file(self,article_id, file_path,folder_name=None):
 		# Then we upload the file.
-		file_info = self.initiate_new_upload(article_id, file_path)
+		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		# Until here we used the figshare API; following lines use the figshare upload service API.
 		self.upload_parts(file_path,file_info)
 		# We return to the figshare API to complete the file upload process.
 		self.complete_upload(article_id, file_info['id'])
 		# self.list_files(article_id)
+
+	def upload_folder(self,article_id, file_path,pre_folder_name=None): #file_path is a directory
+		assert os.path.isdir(file_path), 'file_path must be a folder'
+		folder_name = os.path.basename(file_path)
+		if not pre_folder_name is None:
+			cur_folder_name=f"{pre_folder_name}/{folder_name}"
+		else:
+			cur_folder_name=folder_name
+		for file in os.listdir(file_path):
+			new_file_path=os.path.join(file_path,file)
+			if os.path.isfile(new_file_path):
+				self.upload_file(article_id, new_file_path,cur_folder_name)
+			else: # new file path is still a folder, level 2 folder.
+				self.upload_folder(article_id, new_file_path,cur_folder_name)
+
+	def upload(self,article_id, file_path):
+		if os.path.isfile(file_path):
+			self.upload_file(article_id,file_path)
+		else: #folder
+			self.upload_folder(article_id,file_path)
 
 	def publish(self,article_id):
 		endpoint = '/account/articles/{}/publish'.format(article_id)
@@ -395,6 +442,7 @@ class Figshare:
 	def get_author_id(self,article_id):
 		res=self.get_article(article_id)
 		return res['authors'][0]['id']
+
 	def author(self,author_id):
 		endpoint = '/account/authors/{}'.format(author_id)
 		result = self.issue_request('GET', endpoint)
@@ -506,7 +554,7 @@ def get_filenames(article_id,private=False,output="figshare.tsv"):
 	df = pd.DataFrame(R, columns=['file', 'file_id', 'url'])
 	df.to_csv(output, sep='\t', index=False)
 
-def download(article_id,private=False, outdir="./"):
+def download(article_id,private=False, outdir="./",cpu=1):
 	"""
 	Download all files for a given figshare article id
 
@@ -525,7 +573,7 @@ def download(article_id,private=False, outdir="./"):
 
 	"""
 	fs = Figshare(private=private)
-	fs.download_article(article_id, outdir=outdir)
+	fs.download_article(article_id, outdir=outdir,cpu=cpu)
 
 if __name__ == "__main__":
 	fire.core.Display = lambda lines, out: print(*lines, file=out)
