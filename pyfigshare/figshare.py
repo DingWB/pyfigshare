@@ -18,6 +18,9 @@ from loguru import logger
 logger.level = "INFO"
 
 def download_worker(url,path):
+	dirname = os.path.dirname(path)
+	if not os.path.exists(dirname):
+		os.makedirs(dirname, exist_ok=True)
 	urlretrieve(url, path)
 	return path
 
@@ -64,7 +67,7 @@ class Figshare:
 					  'custom_fields_list', 'funding_list']
 		self.dict_attrs = ['custom_fields', 'timeline']
 		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
-		logger.info(f"chunk_size: {chunk_size} MB")
+		logger.debug(f"chunk_size: {chunk_size} MB")
 		self.max_quota=20
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
@@ -351,7 +354,11 @@ class Figshare:
 		os.makedirs(outdir, exist_ok=True) # This might require Python >=3.2
 		if cpu==1:
 			for file_dict in file_list:
-				urlretrieve(file_dict['download_url'], os.path.join(outdir, file_dict['name']))
+				path=os.path.join(outdir, file_dict['name'])
+				dirname= os.path.dirname(path)
+				if not os.path.exists(dirname):
+					os.makedirs(dirname,exist_ok=True)
+				urlretrieve(file_dict['download_url'], path)
 		else:
 			with ProcessPoolExecutor(cpu) as executor:
 				futures = {}
