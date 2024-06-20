@@ -364,6 +364,7 @@ class Figshare:
 				if os.path.exists(path):
 					logger.info(f"{path} existed")
 					continue
+				logger.info(file_dict['name'])
 				urlretrieve(file_dict['download_url'], path)
 		else:
 			with ProcessPoolExecutor(cpu) as executor:
@@ -379,7 +380,7 @@ class Figshare:
 				for future in as_completed(futures):
 					file_name = futures[future]
 					path = future.result()
-					logger.info(path, end=',')
+					logger.info(file_name)
 
 	def get_file_check_data(self, file_name):
 		with open(file_name, 'rb') as fin:
