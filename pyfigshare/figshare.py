@@ -22,6 +22,7 @@ def download_worker(url,path):
 	if not os.path.exists(dirname):
 		os.makedirs(dirname, exist_ok=True)
 	if os.path.exists(path):
+		logger.info(f"{path} existed")
 		return path
 	urlretrieve(url, path)
 	return path
@@ -361,6 +362,7 @@ class Figshare:
 				if not os.path.exists(dirname):
 					os.makedirs(dirname,exist_ok=True)
 				if os.path.exists(path):
+					logger.info(f"{path} existed")
 					continue
 				urlretrieve(file_dict['download_url'], path)
 		else:
