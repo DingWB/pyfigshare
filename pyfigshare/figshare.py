@@ -510,11 +510,12 @@ class Figshare:
 		result=self.get_account_info()
 		return result['used_quota_private'] / 1024 / 1024 / 1024
 
-def upload(input_path="./",
-		   title='title', description='description',
-		   token=None,output="figshare.tsv",
-		   threshold=15,chunk_size=20,
-		   level='INFO'):
+def upload(
+	input_path="./",
+	title='title', description='description',
+	token=None,output="figshare.tsv",
+	threshold=15,chunk_size=20,
+	level='INFO'):
 	"""
 	Upload files or directory to figshare
 
