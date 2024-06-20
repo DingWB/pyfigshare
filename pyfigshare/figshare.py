@@ -21,6 +21,8 @@ def download_worker(url,path):
 	dirname = os.path.dirname(path)
 	if not os.path.exists(dirname):
 		os.makedirs(dirname, exist_ok=True)
+	if os.path.exists(path):
+		return path
 	urlretrieve(url, path)
 	return path
 
@@ -358,6 +360,8 @@ class Figshare:
 				dirname= os.path.dirname(path)
 				if not os.path.exists(dirname):
 					os.makedirs(dirname,exist_ok=True)
+				if os.path.exists(path):
+					continue
 				urlretrieve(file_dict['download_url'], path)
 		else:
 			with ProcessPoolExecutor(cpu) as executor:
