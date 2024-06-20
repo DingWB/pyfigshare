@@ -1,10 +1,12 @@
 # Installation
+```shell
 pip install git+https://github.com/DingWB/pyfigshare.git
 reinstall
 pip uninstall -y pyfigshare &&  pip install git+https://github.com/DingWB/pyfigshare.git
 
 # or
 pip install pyfigshare
+```
 
 # Usage
 ## (1). setup token
@@ -24,27 +26,40 @@ figshare upload -h
 INFO: Showing help with the command 'figshare upload -- --help'.
 
 NAME
-    figshare upload
+    figshare upload - Upload files or directory to figshare
 
 SYNOPSIS
     figshare upload <flags>
 
+DESCRIPTION
+    Upload files or directory to figshare
+
 FLAGS
     -i, --input_path=INPUT_PATH
         Default: './'
-    --title=DATASET_TITLE
+        folder name, or single file path, or file pattern passed to glob (should be quote using "", and * must be included).
+    --title=TITLE
         Default: 'title'
-    --description=DESCRIPTION
+        article title, if not existed this article, it will be created.
+    -d, --description=DESCRIPTION
         Default: 'description'
+        article description.
     --token=TOKEN
         Type: Optional[]
         Default: None
+        If ~/.figshare/token existed, this paramter can be ignored.
     -o, --output=OUTPUT
         Default: 'figshare.tsv'
-    -r, --rewrite=REWRITE
-        Default: False
+        After the uploading is finished, the file id,url and filename will be written into this output file.
     --threshold=THRESHOLD
         Default: 15
+        There is only 20 GB availabel for private storage, when uploading a big datasets (>20Gb), if the total quota usage is grater than  this threshold, the article will be published so that the 20GB usaged quata will be reset to 0.
+    -c, --chunk_size=CHUNK_SIZE
+        Default: 20
+        chunk size for uploading [20 MB]
+    -l, --level=LEVEL
+        Default: 'INFO'
+        loguru log level: DEBUG, INFO, WARNING, ERROR
 ```
 ```shell
 # To use the command line, one have to paste token into ~/.figshare/token
@@ -143,7 +158,7 @@ COMMANDS
      complete_upload
 
      create_article
-       Create a new article with attributes (see: https://docs.figsh.com/#private_article_create for detail), for example
+       Create a new article with attributes (see: https://docs.figsh.com/#private_article_create for detail), for example: { "title": "Test article title", "description": "Test description of article", "is_metadata_record": true, "metadata_reason": "hosted somewhere else", "tags": [ "tag1", "tag2" ], "keywords": [ "tag1", "tag2" ], "references": [ "http://figshare.com", "http://api.figshare.com" ], "related_materials": [ { "id": 10432, "identifier": "10.6084/m9.figshare.1407024", "identifier_type": "DOI", "relation": "IsSupplementTo", "title": "Figshare for institutions brochure", "is_linkout": false } ], "categories": [ 1, 10, 11 ], "categories_by_source_id": [ "300204", "400207" ], "authors": [ { "name": "John Doe" }, { "id": 1000008 } ], "custom_fields": { "defined_key": "value for it" }, "custom_fields_list": [ { "name": "key", "value": "value" } ], "defined_type": "media", "funding": "", "funding_list": [ { "id": 0, "title": "string" } ], "license": 1, "doi": "", "handle": "", "resource_doi": "", "resource_title": "", "timeline": { "firstOnline": "2015-12-31", "publisherPublication": "2015-12-31", "publisherAcceptance": "2015-12-31" }, "group_id": 0 }
 
      delete_article
 
@@ -186,6 +201,10 @@ COMMANDS
 
      upload
 
+     upload_file
+
+     upload_folder
+
      upload_part
 
      upload_parts
@@ -195,8 +214,15 @@ VALUES
 
      baseurl
 
+     chunk_size
+       chunk size for uploading (in Mb), default is 20MB
+
+     max_quota
+
      private
        whether to read or write private article, set to False if downloading public articles.
+
+     threshold
 
      token
        if token has already been written to ~/.figshare/token, this parameter can be ignored.
@@ -205,6 +231,5 @@ VALUES
 ```
 
 # More information
-pip install git+https://github.com/cognoma/figshare.git
 https://help.figshare.com/article/how-to-use-the-figshare-api
 https://colab.research.google.com/drive/13CAM8mL1u7ZsqNhfZLv7bNb1rdhMI64d?usp=sharing#scrollTo=affected-source
