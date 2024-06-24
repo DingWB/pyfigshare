@@ -350,13 +350,15 @@ class Figshare:
 		response = self.issue_request('GET', endpoint)
 		return response
 
-	def download_article(self, article_id, outdir="./",cpu=1):
+	def download_article(self, article_id, outdir="./",cpu=1,folder=None):
 		outdir=os.path.abspath(os.path.expanduser(outdir))
 		# Get list of files
 		file_list = self.list_files(article_id,show=False)
 		os.makedirs(outdir, exist_ok=True) # This might require Python >=3.2
 		if cpu==1:
 			for file_dict in file_list:
+				if not folder is None and folder!=file_dict['name'].split('/')[0]:
+					continue
 				path=os.path.join(outdir, file_dict['name'])
 				dirname= os.path.dirname(path)
 				if not os.path.exists(dirname):
@@ -370,6 +372,8 @@ class Figshare:
 			with ProcessPoolExecutor(cpu) as executor:
 				futures = {}
 				for file_dict in file_list:
+					if not folder is None and folder!=file_dict['name'].split('/')[0]:
+						continue
 					future = executor.submit(
 						download_worker,
 						url=file_dict['download_url'],
@@ -600,7 +604,7 @@ def get_filenames(article_id,private=False,output="figshare.tsv"):
 	df = pd.DataFrame(R, columns=['file', 'file_id', 'url'])
 	df.to_csv(output, sep='\t', index=False)
 
-def download(article_id,private=False, outdir="./",cpu=1):
+def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	"""
 	Download all files for a given figshare article id
 
@@ -619,7 +623,7 @@ def download(article_id,private=False, outdir="./",cpu=1):
 
 	"""
 	fs = Figshare(private=private)
-	fs.download_article(article_id, outdir=outdir,cpu=cpu)
+	fs.download_article(article_id, outdir=outdir,cpu=cpu,folder=folder)
 
 if __name__ == "__main__":
 	fire.core.Display = lambda lines, out: print(*lines, file=out)
