@@ -572,6 +572,7 @@ def upload(
 
 	for file_path in input_files:
 		fs.upload(aid, file_path)
+	fs.publish(aid) #publish article after the uploading is done.
 	get_filenames(aid, private=True, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
