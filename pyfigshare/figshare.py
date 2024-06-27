@@ -27,7 +27,7 @@ def download_worker(url,path):
 	return path
 
 class Figshare:
-	def __init__(self, token=None, private=False,
+	def __init__(self, token=None, private=True,
 				 chunk_size=20,threshold=18):
 		"""
 		figshare class
@@ -73,7 +73,7 @@ class Figshare:
 		self.max_quota=20
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
-		print(url)
+		# print(url)
 		headers = {'Authorization': 'token ' + self.token}
 		if data is not None and not binary:
 			data = json.dumps(data)
