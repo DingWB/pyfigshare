@@ -70,7 +70,7 @@ figshare upload -i test_data/ --title test1
 ## (3) Get private or public article information 
 ### List private or public article file names
 ```shell
-figshare get_filenames 9273710
+figshare list_files 9273710
 ```
 ```text
 Listing files for article 9273710:
