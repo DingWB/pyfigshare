@@ -422,7 +422,10 @@ class Figshare:
 		else:
 			logger.info(f"used quota: {quota_used}")
 		data = {'name':name,'md5': md5,'size': size}
-		result = self.issue_request('POST', endpoint, data=data)
+		try:
+			result = self.issue_request('POST', endpoint, data=data)
+		except:
+			logger.error(f"{folder_name}/{file_path}, name: {name}, size: {size}")
 		# logger.info('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
 		return result
@@ -449,7 +452,10 @@ class Figshare:
 
 	def upload_file(self,article_id, file_path,folder_name=None):
 		# Then we upload the file.
-		file_info = self.initiate_new_upload(article_id, file_path,folder_name)
+		try:
+			file_info = self.initiate_new_upload(article_id, file_path,folder_name)
+		except:
+			logger.debug(f"Error for file: {folder_name}/{file_path}")
 		if file_info is None:
 			logger.info(f"File existed, skipped: {file_path}")
 			return None
