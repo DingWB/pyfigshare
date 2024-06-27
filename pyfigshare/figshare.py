@@ -2,7 +2,6 @@
 """
 @author: DingWB
 """
-BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
 import hashlib
 import json
 import glob
@@ -91,16 +90,16 @@ class Figshare:
 		return data
 
 	def issue_request(self, method, endpoint, *args, **kwargs):
-		return self.raw_issue_request(method, BASE_URL.format(endpoint=endpoint), *args, **kwargs)
+		return self.raw_issue_request(method, self.baseurl.format(endpoint=endpoint), *args, **kwargs)
 
 	def list_files(self, article_id,version=None, private=None,show=True):
 		if private is None:
 			private=self.private
 		if version is None:
 			if private:
-				endpoint='/account/articles/{}/files'.format(article_id)
+				endpoint='account/articles/{}/files'.format(article_id)
 			else:
-				endpoint='/articles/{}/files'.format(article_id)
+				endpoint='articles/{}/files'.format(article_id)
 			result = self.issue_request('GET', endpoint)
 			if show:
 				logger.info('Listing files for article {}:'.format(article_id))
@@ -277,9 +276,9 @@ class Figshare:
 		if private is None:
 			private=self.private
 		if private:
-			endpoint='/account/articles/{0}/files/{1}'.format(article_id, file_id)
+			endpoint='account/articles/{0}/files/{1}'.format(article_id, file_id)
 		else:
-			endpoint='/articles/{0}/files/{1}'.format(article_id, file_id)
+			endpoint='articles/{0}/files/{1}'.format(article_id, file_id)
 		result = self.issue_request('DELETE',endpoint)
 		return result
 
@@ -310,14 +309,14 @@ class Figshare:
 			private=self.private
 		if version is None:
 			if private:
-				endpoint='/account/articles/{}'.format(article_id)
+				endpoint='account/articles/{}'.format(article_id)
 			else:
-				endpoint='/articles/{}'.format(article_id)
+				endpoint='articles/{}'.format(article_id)
 		else:
 			if private:
-				endpoint='/account/articles/{}/versions/{}'.format(article_id,version)
+				endpoint='account/articles/{}/versions/{}'.format(article_id,version)
 			else:
-				endpoint = '/articles/{}/versions/{}'.format(article_id,version)
+				endpoint = 'articles/{}/versions/{}'.format(article_id,version)
 		result = self.issue_request('GET', endpoint)
 		return result
 
@@ -327,7 +326,7 @@ class Figshare:
 		if private:
 			raise ValueError("Not supported for private")
 		else:
-			endpoint='/articles/{}/versions'.format(article_id)
+			endpoint='articles/{}/versions'.format(article_id)
 		response = self.issue_request('GET', endpoint)
 		return response
 
@@ -351,9 +350,9 @@ class Figshare:
 		if private is None:
 			private=self.private
 		if private:
-			endpoint='/account/articles/{0}/files/{1}'.format(article_id, file_id)
+			endpoint='account/articles/{0}/files/{1}'.format(article_id, file_id)
 		else:
-			endpoint='/articles/{0}/files/{1}'.format(article_id, file_id)
+			endpoint='articles/{0}/files/{1}'.format(article_id, file_id)
 		response = self.issue_request('GET', endpoint)
 		return response
 
@@ -505,7 +504,7 @@ class Figshare:
 			logger.warning(f"{file_path} is not dir, neither file, not recognized")
 
 	def publish(self,article_id):
-		endpoint = '/account/articles/{}/publish'.format(article_id)
+		endpoint = 'account/articles/{}/publish'.format(article_id)
 		result = self.issue_request('POST', endpoint)
 		return result
 
@@ -514,7 +513,7 @@ class Figshare:
 		return res['authors'][0]['id']
 
 	def author(self,author_id):
-		endpoint = '/account/authors/{}'.format(author_id)
+		endpoint = 'account/authors/{}'.format(author_id)
 		result = self.issue_request('GET', endpoint)
 		return result
 
