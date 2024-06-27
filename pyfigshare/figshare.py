@@ -283,6 +283,13 @@ class Figshare:
 		result = self.issue_request('DELETE',endpoint)
 		return result
 
+	def delete_all_files(self,article_id,private=None,version=None):
+		files=self.list_files(article_id,version=version, private=private,show=False)
+		for file in files:
+			file_id=file['id']
+			logger.info(f"Deleting file: {file['name']}")
+			self.delete_file(article_id,file_id,private=private)
+
 	def delete_articles_with_title(self, title):
 		articles=self.search_articles(title=title)
 		for article in articles:
@@ -398,7 +405,7 @@ class Figshare:
 			return md5.hexdigest(), size
 
 	def initiate_new_upload(self, article_id, file_path,folder_name=None):
-		basename = os.path.basename(file_path).replace(' ','_')
+		basename = os.path.basename(file_path) #.replace(' ','_')
 		if not folder_name is None:
 			name = f"{folder_name}/{basename}"
 		else:
@@ -419,8 +426,6 @@ class Figshare:
 			except:
 				logger.warning("Failed to publish, please publish manually")
 				print(f"article_id:{article_id}")
-		else:
-			logger.info(f"used quota: {quota_used}")
 		data = {'name':name,'md5': md5,'size': size}
 		try:
 			result = self.issue_request('POST', endpoint, data=data)
