@@ -69,7 +69,6 @@ class Figshare:
 					  'custom_fields_list', 'funding_list']
 		self.dict_attrs = ['custom_fields', 'timeline']
 		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
-		logger.debug(f"chunk_size: {chunk_size} MB")
 		self.max_quota=20
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
