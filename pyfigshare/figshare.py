@@ -398,7 +398,7 @@ class Figshare:
 			return md5.hexdigest(), size
 
 	def initiate_new_upload(self, article_id, file_path,folder_name=None):
-		basename = os.path.basename(file_path)
+		basename = os.path.basename(file_path).replace(' ','_')
 		if not folder_name is None:
 			name = f"{folder_name}/{basename}"
 		else:
@@ -425,7 +425,7 @@ class Figshare:
 		try:
 			result = self.issue_request('POST', endpoint, data=data)
 		except:
-			logger.error(f"Unknown error for: file_path: {file_path}, name: {name}, size: {size}")
+			logger.debug(f"Unknown error for: file_path: {file_path}, name: {name}, size: {size}")
 		# logger.info('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
 		return result
@@ -455,7 +455,8 @@ class Figshare:
 		try:
 			file_info = self.initiate_new_upload(article_id, file_path,folder_name)
 		except:
-			logger.debug(f"Error for file: {folder_name}/{file_path}")
+			logger.error(f"Error for file: {file_path}, skipped..")
+			return None
 		if file_info is None:
 			logger.info(f"File existed, skipped: {file_path}")
 			return None
