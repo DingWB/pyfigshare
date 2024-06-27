@@ -43,7 +43,7 @@ class Figshare:
 		chunk_size: int
 			chunk size for uploading (in Mb), default is 20MB
 		"""
-		self.baseurl = "https://api.figshare.com/v2/{endpoint}'"
+		self.baseurl = "https://api.figshare.com/v2/{endpoint}"
 		self.token_path=os.path.expanduser("~/.figshare/token")
 		if token is None:
 			if os.path.exists(self.token_path):
@@ -73,6 +73,7 @@ class Figshare:
 		self.max_quota=20
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
+		print(url)
 		headers = {'Authorization': 'token ' + self.token}
 		if data is not None and not binary:
 			data = json.dumps(data)
@@ -97,9 +98,9 @@ class Figshare:
 			private=self.private
 		if version is None:
 			if private:
-				endpoint='account/articles/{}/files'.format(article_id)
+				endpoint="account/articles/{}/files".format(article_id)
 			else:
-				endpoint='articles/{}/files'.format(article_id)
+				endpoint="articles/{}/files".format(article_id)
 			result = self.issue_request('GET', endpoint)
 			if show:
 				logger.info('Listing files for article {}:'.format(article_id))
@@ -116,7 +117,7 @@ class Figshare:
 			return request['files']
 
 	def list_articles(self,show=False):
-		result = self.issue_request('GET', 'account/articles')
+		result = self.issue_request('GET', "account/articles")
 		if show:
 			logger.info('Listing current articles:')
 			if result:
@@ -636,6 +637,10 @@ def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	"""
 	fs = Figshare(private=private)
 	fs.download_article(article_id, outdir=outdir,cpu=cpu,folder=folder)
+
+def test():
+	fs=Figshare()
+	fs.list_files(26042794)
 
 if __name__ == "__main__":
 	fire.core.Display = lambda lines, out: print(*lines, file=out)
