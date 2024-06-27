@@ -585,10 +585,10 @@ def upload(
 	for file_path in input_files:
 		fs.upload(aid, file_path)
 	fs.publish(aid) #publish article after the uploading is done.
-	get_filenames(aid, private=True, output=os.path.expanduser(output))
+	list_files(aid, private=True, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
-def get_filenames(article_id,private=False,output="figshare.tsv"):
+def list_files(article_id,private=False,version=None,output=None):
 	"""
 	Get all files id, url and filenames for a given article id.
 
@@ -609,13 +609,21 @@ def get_filenames(article_id,private=False,output="figshare.tsv"):
 	fs = Figshare(private=private)
 	# fs.get_article(article_id) #article_id=9273710
 	# generating the mapping file from file id to file name
-	res = fs.list_files(article_id)
+	res = fs.list_files(article_id,version=version,show=False)
 	R = []
 	for r in res:
 		url = "https://figshare.com/ndownloader/files/" + str(r['id'])
 		R.append([r['name'], r['id'], url])
 	df = pd.DataFrame(R, columns=['file', 'file_id', 'url'])
-	df.to_csv(output, sep='\t', index=False)
+	if not output is None:
+		df.to_csv(output, sep='\t', index=False)
+	else:
+		sys.stdout.write('\t'.join([str(i) for i in df.columns.tolist()]) + '\n')
+		for i, row in df.iterrows():
+			try:
+				sys.stdout.write('\t'.join([str(i) for i in row.tolist()]) + '\n')
+			except:
+				sys.stdout.close()
 
 def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	"""
