@@ -425,7 +425,7 @@ class Figshare:
 		try:
 			result = self.issue_request('POST', endpoint, data=data)
 		except:
-			logger.error(f"{folder_name}/{file_path}, name: {name}, size: {size}")
+			logger.error(f"Unknown error for: file_path: {file_path}, name: {name}, size: {size}")
 		# logger.info('Initiated file upload:', result['location'], '\n')
 		result = self.raw_issue_request('GET', result['location'])
 		return result
