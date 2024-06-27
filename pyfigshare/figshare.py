@@ -27,7 +27,7 @@ def download_worker(url,path):
 	return path
 
 class Figshare:
-	def __init__(self, token=None, private=True,
+	def __init__(self, token=None, private=False,
 				 chunk_size=20,threshold=18):
 		"""
 		figshare class
