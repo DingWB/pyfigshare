@@ -651,4 +651,4 @@ def test():
 
 if __name__ == "__main__":
 	fire.core.Display = lambda lines, out: print(*lines, file=out)
-	fire.Fire()
+	fire.Fire(serialize=lambda x:print(x) if not x is None else print(""))

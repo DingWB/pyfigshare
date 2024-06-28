@@ -13,7 +13,7 @@ def main():
 			'Figshare': Figshare,
 			'download':download,
 			'list_files':list_files,
-		}
+		},serialize=lambda x:print(x) if not x is None else print("")
 	)
 
 if __name__=="__main__":
