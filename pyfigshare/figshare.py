@@ -337,6 +337,10 @@ def initiate_new_upload(article_id, file_path,folder_name=None):
 	endpoint = endpoint.format(article_id)
 	md5, size = get_file_check_data(file_path)
 	if size == 0:
+		logger.info(f"File size is 0, skipped: {file_path}")
+		return False
+	if size/1024/1024/1024 > MAX_QUOTA:
+		logger.error(f"single file must be < 20G, see file: {file_path}")
 		return False
 	# check whether there is enough quota before initiating new upload
 	quota_used=get_used_quota()
@@ -393,7 +397,6 @@ def upload_worker(article_id, file_path,folder_name=None):
 		logger.error(f"Error for file: {file_path}, skipped..")
 		return None
 	if file_info==False:
-		logger.info(f"File size is 0, skipped: {file_path}")
 		return None
 	logger.info(file_path)
 	# Until here we used the figshare API; following lines use the figshare upload service API.
