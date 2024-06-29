@@ -128,7 +128,7 @@ def search_articles(private=True,title=None,**kwargs):
 		R = issue_request('POST', 'articles/search',data=data)
 	return R
 
-def create_article( **kwargs):
+def create_article(**kwargs):
 	"""
 	Create a new article with attributes (see: https://docs.figsh.com/#private_article_create
 		for detail), for example:
@@ -258,12 +258,12 @@ def delete_all_files(article_id,private=False,version=None):
 		logger.info(f"Deleting file: {file['name']}")
 		delete_file(article_id,file_id,private=private)
 
-def delete_articles_with_title( title):
-	articles=search_articles(title=title)
+def delete_articles_with_title(title,private=True):
+	articles=search_articles(title=title,private=private)
 	for article in articles:
 		delete_article(article['id'])
 
-def update_article( article_id, **kwargs):
+def update_article(article_id, **kwargs):
 	allowed = VALID_ATTRS
 	valid_keys = set(kwargs.keys()).intersection(allowed)
 	body = {}
@@ -273,7 +273,7 @@ def update_article( article_id, **kwargs):
 								data=json.dumps(body))
 	return result
 
-def list_article_versions( article_id, private=False):
+def list_article_versions(article_id, private=False):
 	if private:
 		raise ValueError("Not supported for private")
 	else:
@@ -281,7 +281,7 @@ def list_article_versions( article_id, private=False):
 	response = issue_request('GET', endpoint)
 	return response
 
-def get_file_details( article_id, file_id,private=False):
+def get_file_details(article_id, file_id,private=False):
 	""" Get the details about a file associated with a given article.
 
 	Parameters
@@ -326,7 +326,7 @@ def lock():
 	os.system(f"touch {lock_file}")
 	logger.debug("Locked..")
 
-def initiate_new_upload( article_id, file_path,folder_name=None):
+def initiate_new_upload(article_id, file_path,folder_name=None):
 	global THRESHOLD
 	basename = os.path.basename(file_path) #.replace(' ','_')
 	if not folder_name is None:
@@ -360,7 +360,7 @@ def initiate_new_upload( article_id, file_path,folder_name=None):
 	result = raw_issue_request('GET', result['location'])
 	return result
 
-def complete_upload( article_id, file_id):
+def complete_upload(article_id, file_id):
 	issue_request('POST', 'account/articles/{}/files/{}'.format(article_id, file_id))
 	try:
 		result = publish(article_id)  # publish article
@@ -368,7 +368,7 @@ def complete_upload( article_id, file_id):
 	except:
 		pass
 
-def upload_parts( file_path, file_info):
+def upload_parts(file_path, file_info):
 	url = '{upload_url}'.format(**file_info)
 	result = raw_issue_request('GET', url)
 	# print('Uploading parts:')
@@ -376,7 +376,7 @@ def upload_parts( file_path, file_info):
 		for part in result['parts']:
 			upload_part(file_info, fin, part)
 
-def upload_part( file_info, stream, part):
+def upload_part(file_info, stream, part):
 	udata = file_info.copy()
 	udata.update(part)
 	url = '{upload_url}/{partNo}'.format(**udata)
@@ -592,7 +592,7 @@ def upload(
 				path = future.result()
 				logger.info(file_name)
 	publish(article_id) #publish article after the uploading is done.
-	show_files(article_id, private=True, output=os.path.expanduser(output))
+	show_files(article_id, private=False, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
 def show_files(article_id,private=False,version=None,output=None):
