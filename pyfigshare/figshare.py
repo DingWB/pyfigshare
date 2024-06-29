@@ -99,7 +99,7 @@ def list_articles(show=False):
 			logger.warning("No articles found.")
 	return result
 
-def search_articles(private=False,title=None,**kwargs):
+def search_articles(private=True,title=None,**kwargs):
 	if private:
 		articles=list_articles()
 		R = []
@@ -565,7 +565,7 @@ def upload(
 		input_files=glob.glob(input_path)
 	else:
 		input_files=[input_path]
-	r = search_articles(title=title)
+	r = search_articles(title=title,private=True)
 	if len(r) == 0:
 		logger.info(f"article: {title} not found, create it")
 		article_id = create_article(title=title, description=description)
