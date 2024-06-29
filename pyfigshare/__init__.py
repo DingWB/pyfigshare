@@ -4,7 +4,7 @@ from .figshare import (
 	search_articles,upload,show_files,download,get_account_info,
 	publish,get_file_details,list_article_versions,
 	delete_articles_with_title,delete_all_files,
-	delete_file,delete_article,list_articles
+	delete_file,delete_article,list_articles,upload_worker
 )
 from ._version import version as __version__
 
