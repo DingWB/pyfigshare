@@ -99,15 +99,15 @@ def list_articles(show=False):
 			logger.warning("No articles found.")
 	return result
 
-def search_articles(private=False,**kwargs):
+def search_articles(private=False,title=None,**kwargs):
 	if private:
-		title=kwargs['title']
 		articles=list_articles()
 		R = []
 		for article in articles:
 			if article['title'] == title:
 				R.append(article)
 	else:
+		kwargs['title']=title
 		data={}
 		invalid_keys = []
 		for key in kwargs:
@@ -429,9 +429,6 @@ def prepare_upload_folder(article_id, file_path,pre_folder_name=None): #file_pat
 
 def prepare_upload_file_path(article_id, file_path):
 	global EXITED_FILES
-	res = list_files(article_id, show=False)
-	EXITED_FILES = [r['name'] for r in res]
-	logger.debug(EXITED_FILES)
 	if os.path.isdir(file_path):
 		yield from prepare_upload_folder(article_id, file_path)
 	elif os.path.isfile(file_path): #file
@@ -445,6 +442,10 @@ def prepare_upload_file_path(article_id, file_path):
 		logger.warning(f"{file_path} is not dir, neither file, not recognized")
 
 def prepare_upload(article_id, input_files):
+	global EXITED_FILES
+	res = list_files(article_id, show=False)
+	EXITED_FILES = [r['name'] for r in res]
+	logger.debug(EXITED_FILES)
 	for file_path in input_files:
 		yield from prepare_upload_file_path(article_id, file_path)
 
