@@ -522,7 +522,7 @@ def upload(
 	title='title', description='description',
 	output="figshare.tsv",
 	threshold=15,chunk_size=20,
-	level='INFO',cpu=1):
+	level='INFO',cpu=1,subfolder=None):
 	"""
 	Upload files or directory to figshare
 
@@ -549,6 +549,9 @@ def upload(
 		chunk size for uploading [20 MB]
 	level: str
 		loguru log level: DEBUG, INFO, WARNING, ERROR
+	cpu: int
+	subfolder:str
+		only upload the given subfolder under input_path
 
 	Returns
 	-------
@@ -575,11 +578,15 @@ def upload(
 	unlock() #unlock
 	if cpu == 1:
 		for file_path,folder_name in prepare_upload(article_id, input_files):
+			if not subfolder is None and folder_name!=subfolder:
+				continue
 			upload_worker(article_id, file_path,folder_name)
 	else:
 		with ProcessPoolExecutor(cpu) as executor:
 			futures = {}
 			for file_path,folder_name in prepare_upload(article_id, input_files):
+				if not subfolder is None and folder_name != subfolder:
+					continue
 				future = executor.submit(
 					upload_worker,
 					article_id=article_id, file_path=file_path,
