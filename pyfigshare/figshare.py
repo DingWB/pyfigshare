@@ -71,6 +71,7 @@ class Figshare:
 		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
 		self.max_quota=20
 		self.existed_files=[]
+		self.target_folder=None
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
 		# print(url)
@@ -512,8 +513,7 @@ class Figshare:
 		self.existed_files = [r['name'] for r in res]
 		logger.debug(self.existed_files)
 
-	def upload(self,article_id, file_path,target_folder=None):
-		self.target_folder=target_folder
+	def upload(self,article_id, file_path):
 		# logger.debug(self.existed_files)
 		if os.path.isdir(file_path):
 			self.upload_folder(article_id, file_path)
@@ -601,8 +601,9 @@ def upload(
 		article_id = r[0]['id'] #article id
 
 	fs.check_files(article_id)
+	fs.target_folder = target_folder
 	for file_path in input_files:
-		fs.upload(article_id, file_path,target_folder)
+		fs.upload(article_id, file_path)
 	fs.publish(article_id) #publish article after the uploading is done.
 	list_files(article_id, private=True, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
