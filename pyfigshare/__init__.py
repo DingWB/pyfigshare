@@ -17,6 +17,7 @@ def main():
 		'delete_articles_with_title':delete_articles_with_title,
 		'delete_all_files':delete_all_files,'delete_file':delete_file,
 		'delete_article':delete_article,'list_articles':list_articles,
+		'upload_worker':upload_worker,
 	},serialize=lambda x:print(x) if not x is None else print("")
 	)
 
