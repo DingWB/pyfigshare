@@ -289,6 +289,18 @@ class Figshare:
 			logger.info(f"Deleting file: {file['name']}")
 			self.delete_file(article_id,file_id,private=private)
 
+	def delete_folder(self, article_id, folder_name, version=None, private=True):
+		if not folder_name.endswith('/'):
+			folder_name = folder_name + '/'
+		files = self.list_files(article_id, version=version, private=private, show=False)
+		for file in files:
+			file_id = file['id']
+			file_name = file['name']
+			if not file_name.startswith(folder_name):
+				continue
+			logger.info(f"deleting file {file_name}")
+			self.delete_file(article_id, file_id, private=private)
+
 	def delete_articles_with_title(self, title):
 		articles=self.search_articles(title=title)
 		for article in articles:
