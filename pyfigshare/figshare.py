@@ -70,6 +70,7 @@ class Figshare:
 		self.dict_attrs = ['custom_fields', 'timeline']
 		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
 		self.max_quota=20
+		self.existed_files=[]
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
 		# print(url)
@@ -506,11 +507,13 @@ class Figshare:
 			else:
 				logger.warning(f"{new_file_path} is not dir, neither file, not recognized")
 
-	def upload(self,article_id, file_path,target_folder=None):
+	def check_files(self,article_id):
 		res = self.list_files(article_id, show=False)
 		self.existed_files = [r['name'] for r in res]
+
+	def upload(self,article_id, file_path,target_folder=None):
 		self.target_folder=target_folder
-		logger.debug(self.existed_files)
+		# logger.debug(self.existed_files)
 		if os.path.isdir(file_path):
 			self.upload_folder(article_id, file_path)
 		elif os.path.isfile(file_path): #file
@@ -596,9 +599,10 @@ def upload(
 		logger.info(f"found existed article")
 		article_id = r[0]['id'] #article id
 
+	fs.check_files(article_id)
 	for file_path in input_files:
 		fs.upload(article_id, file_path,target_folder)
-	# fs.publish(article_id) #publish article after the uploading is done.
+	fs.publish(article_id) #publish article after the uploading is done.
 	list_files(article_id, private=True, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
