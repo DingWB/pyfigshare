@@ -26,7 +26,9 @@ LIST_ATTRS = ['tags', 'keywords', 'references', 'related_materials', 'categories
 DICT_ATTRS = ['custom_fields', 'timeline']
 VALID_ATTRS=VALUE_ATTRS+LIST_ATTRS+DICT_ATTRS
 MAX_QUOTA=20
-global TOKEN
+global TOKEN,CHUNK_SIZE,THRESHOLD
+CHUNK_SIZE=20
+THRESHOLD=15
 if os.path.exists(os.path.expanduser("~/.figshare/token")):
 	with open(os.path.expanduser("~/.figshare/token"), 'r') as f:
 		TOKEN = f.read().strip()
