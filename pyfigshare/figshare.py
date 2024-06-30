@@ -510,6 +510,7 @@ class Figshare:
 	def check_files(self,article_id):
 		res = self.list_files(article_id, show=False)
 		self.existed_files = [r['name'] for r in res]
+		logger.debug(self.existed_files)
 
 	def upload(self,article_id, file_path,target_folder=None):
 		self.target_folder=target_folder
