@@ -94,28 +94,47 @@ class Figshare:
 	def issue_request(self, method, endpoint, *args, **kwargs):
 		return self.raw_issue_request(method, self.baseurl.format(endpoint=endpoint), *args, **kwargs)
 
-	def list_files(self, article_id,version=None, private=None,show=True):
+	def get_article(self, article_id, version=None,private=None):
 		if private is None:
 			private=self.private
 		if version is None:
 			if private:
-				endpoint="account/articles/{}/files".format(article_id)
+				endpoint='account/articles/{}'.format(article_id)
 			else:
-				endpoint="articles/{}/files".format(article_id)
-			result = self.issue_request('GET', endpoint)
-			if show:
-				logger.info('Listing files for article {}:'.format(article_id))
-			if result:
-				for item in result:
-					if show:
-						logger.info('  {id} - {name}'.format(**item))
-			else:
-				if show:
-					logger.warning('  No files.')
-			return result
+				endpoint='articles/{}'.format(article_id)
 		else:
-			request = self.get_article(article_id, version)
-			return request['files']
+			if private:
+				endpoint='account/articles/{}/versions/{}'.format(article_id,version)
+			else:
+				endpoint = 'articles/{}/versions/{}'.format(article_id,version)
+		result = self.issue_request('GET', endpoint)
+		return result
+
+	def list_files(self, article_id,version=None, private=None,show=True):
+		# if version is None:
+		# 	if private:
+		# 		endpoint="account/articles/{}/files".format(article_id)
+		# 	else:
+		# 		endpoint="articles/{}/files".format(article_id)
+		# 	result = self.issue_request('GET', endpoint)
+		# 	if show:
+		# 		logger.info('Listing files for article {}:'.format(article_id))
+		# 	if result:
+		# 		for item in result:
+		# 			if show:
+		# 				logger.info('  {id} - {name}'.format(**item))
+		# 	else:
+		# 		if show:
+		# 			logger.warning('  No files.')
+		# 	return result
+		# else:
+		# 	request = self.get_article(article_id, version)
+		# 	return request['files']
+		request = self.get_article(article_id, version,private)
+		if show:
+			for item in request['files']:
+				logger.info('  {id} - {name}'.format(**item))
+		return request['files']
 
 	def list_articles(self,show=False):
 		result = self.issue_request('GET', "account/articles")
@@ -316,22 +335,6 @@ class Figshare:
 			body[key] = kwargs[key]
 		result = self.issue_request('PUT', 'account/articles/{}'.format(article_id),
 									data=json.dumps(body))
-		return result
-
-	def get_article(self, article_id, version=None,private=None):
-		if private is None:
-			private=self.private
-		if version is None:
-			if private:
-				endpoint='account/articles/{}'.format(article_id)
-			else:
-				endpoint='articles/{}'.format(article_id)
-		else:
-			if private:
-				endpoint='account/articles/{}/versions/{}'.format(article_id,version)
-			else:
-				endpoint = 'articles/{}/versions/{}'.format(article_id,version)
-		result = self.issue_request('GET', endpoint)
 		return result
 
 	def list_article_versions(self, article_id, private=None):
@@ -599,13 +602,14 @@ def upload(
 	else:
 		logger.info(f"found existed article")
 		article_id = r[0]['id'] #article id
+		# fs.private=False
 
 	fs.check_files(article_id)
 	fs.target_folder = target_folder
 	for file_path in input_files:
 		fs.upload(article_id, file_path)
 	fs.publish(article_id) #publish article after the uploading is done.
-	list_files(article_id, private=True, output=os.path.expanduser(output))
+	list_files(article_id, private=False, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
 def list_files(article_id,private=False,version=None,output=None):
