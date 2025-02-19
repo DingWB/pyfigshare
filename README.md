@@ -64,6 +64,7 @@ FLAGS
 ```shell
 # To use the command line, one have to paste token into ~/.figshare/token
 figshare upload -i test_data/ --title test1
+figshare upload -i MajorType/ --title MajorType --threshold 13 -c 100 -d "MajorType allc files"
 # upload folder test_data onto figshare and give a title "test1"
 ```
 
