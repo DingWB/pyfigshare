@@ -10,7 +10,7 @@ pip install pyfigshare
 
 # Usage
 ## (1). setup token
-Login to https://figshare.com, create account, click profile -> Applications -> Create Personal Tokens
+Login to https://figshare.com, create account, click profile -> integrations -> Applications -> Create Personal Tokens
 ```
 mkdir -p ~/.figshare
 vim ~/.figshare/token

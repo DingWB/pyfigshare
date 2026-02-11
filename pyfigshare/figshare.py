@@ -16,13 +16,23 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from loguru import logger
 logger.level = "INFO"
 
-def download_worker(url,path):
+def download_worker(url, path, headers=None):
 	dirname = os.path.dirname(path)
 	if not os.path.exists(dirname):
 		os.makedirs(dirname, exist_ok=True)
 	if os.path.exists(path):
 		logger.info(f"{path} existed")
 		return path
+	# Use requests so we can provide Authorization header for private files
+	if not headers is None:
+		resp = requests.get(url, headers=headers, stream=True, timeout=60)
+		resp.raise_for_status()
+		with open(path, 'wb') as fout:
+			for chunk in resp.iter_content(chunk_size=8192):
+				if chunk:
+					fout.write(chunk)
+		return path
+	# fallback to urllib (no header support)
 	urlretrieve(url, path)
 	return path
 
@@ -377,6 +387,8 @@ class Figshare:
 		outdir=os.path.abspath(os.path.expanduser(outdir))
 		# Get list of files
 		file_list = self.list_files(article_id,show=False)
+		# Prepare headers for private downloads
+		headers = {'Authorization': 'token ' + self.token} if self.private else None
 		os.makedirs(outdir, exist_ok=True) # This might require Python >=3.2
 		if cpu==1:
 			for file_dict in file_list:
@@ -390,7 +402,8 @@ class Figshare:
 					logger.info(f"{path} existed")
 					continue
 				logger.info(file_dict['name'])
-				urlretrieve(file_dict['download_url'], path)
+				# download with optional Authorization header for private files
+				download_worker(file_dict['download_url'], path, headers=headers)
 		else:
 			with ProcessPoolExecutor(cpu) as executor:
 				futures = {}
@@ -399,8 +412,9 @@ class Figshare:
 						continue
 					future = executor.submit(
 						download_worker,
-						url=file_dict['download_url'],
-						path=os.path.join(outdir, file_dict['name'])
+						file_dict['download_url'],
+						os.path.join(outdir, file_dict['name']),
+						headers=headers
 					)
 					futures[future] = file_dict['name']
 
