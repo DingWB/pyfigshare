@@ -402,17 +402,19 @@ class Figshare:
 					logger.info(f"{path} existed")
 					continue
 				logger.info(file_dict['name'])
+				url=file_dict['download_url'] if not self.private else f"https://figshare.com/ndownloader/files/{file_dict['id']}"
 				# download with optional Authorization header for private files
-				download_worker(file_dict['download_url'], path, headers=headers)
+				download_worker(url, path, headers=headers)
 		else:
 			with ProcessPoolExecutor(cpu) as executor:
 				futures = {}
 				for file_dict in file_list:
 					if not folder is None and folder!=file_dict['name'].split('/')[0]:
 						continue
+					url=file_dict['download_url'] if not self.private else f"https://figshare.com/ndownloader/files/{file_dict['id']}"
 					future = executor.submit(
 						download_worker,
-						file_dict['download_url'],
+						url,
 						os.path.join(outdir, file_dict['name']),
 						headers=headers
 					)
