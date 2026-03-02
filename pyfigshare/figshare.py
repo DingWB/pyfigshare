@@ -556,7 +556,7 @@ class Figshare:
 def upload(
 	input_path="./",
 	title='title', description='description',
-	token=None,output="figshare.tsv",
+	token=None,output="figshare.tsv",publish=True,
 	threshold=18,chunk_size=20,
 	level='INFO',target_folder=None):
 	"""
@@ -614,7 +614,8 @@ def upload(
 	fs.target_folder = target_folder
 	for file_path in input_files:
 		fs.upload(article_id, file_path)
-	fs.publish(article_id) #publish article after the uploading is done.
+	if publish:
+		fs.publish(article_id) #publish article after the uploading is done.
 	list_files(article_id, private=False, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
 
