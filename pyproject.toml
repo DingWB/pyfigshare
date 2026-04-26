@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0","pandas>=1.3.5",'fire','requests',"wheel","setuptools_scm[toml]>=6.2",'loguru']
+requires = ["setuptools>=61.0", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
@@ -9,18 +9,24 @@ write_to = 'pyfigshare/_version.py'
 [project]
 name = "pyfigshare"
 dynamic = ["version"] #"scripts","entry-points"
-dependencies=['fire','pandas','requests','loguru']
+dependencies=['pandas','requests','loguru']
 authors = [
   { name="Wubin Ding", email="ding.wu.bin.gm@gmail.com" },
 ]
 description = "A python package to interact with figshare"
 keywords = ["pyfigshare", "figshare"]
 readme = "README.md"
-requires-python = ">=3.0"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
 ]
 license = {file = "LICENSE"}
 
@@ -32,4 +38,26 @@ documentation = "https://dingwb.github.io/pyfigshare"
 
 [project.scripts]
 figshare="pyfigshare:main"
+
+[tool.setuptools.packages.find]
+exclude = ["docs", "tests", "tests.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",  # long lines (some docstrings)
+    "E701", "E702",
+    "E712",  # explicit bool comparison occasionally needed for figshare API
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "F401", "F811"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 

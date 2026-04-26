@@ -1,17 +1,23 @@
-import os,sys
-import fire
+import sys
 from .figshare import (
-	upload,list_files,download,Figshare
+	upload, list_files, download, Figshare,
 )
-from ._version import version as __version__
+from .cli import main, build_parser
 
-def main():
-    fire.core.Display = lambda lines, out: print(*lines, file=out)
-    fire.Fire({
-		'upload':upload,'list_files':list_files,'download':download,
-		'Figshare':Figshare,
-	},serialize=lambda x:print(x) if not x is None else print("")
-	)
+try:
+	from ._version import version as __version__
+except ImportError:  # source checkout without setuptools_scm-generated _version.py
+	__version__ = "0.0.0+unknown"
 
-if __name__=="__main__":
-    main()
+__all__ = [
+	"Figshare",
+	"upload",
+	"download",
+	"list_files",
+	"main",
+	"build_parser",
+	"__version__",
+]
+
+if __name__ == "__main__":
+	sys.exit(main())

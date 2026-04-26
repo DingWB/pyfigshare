@@ -1,25 +1,62 @@
 # -*- coding: utf-8 -*-
-"""
+"""Core Figshare client and high-level upload/download/list helpers.
+
 @author: DingWB
 """
+from __future__ import annotations
+
 import hashlib
 import json
 import glob
-from wsgiref import headers
-import requests
-from requests.exceptions import HTTPError
-import os,sys
-import pandas as pd
-from urllib.request import urlretrieve
-import fire
+import os
+import sys
+import stat
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from loguru import logger
-logger.level = "INFO"
+import random
+import threading
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from urllib.request import urlretrieve
 
-def download_worker(url, path):
+import pandas as pd
+import requests
+from requests.adapters import HTTPAdapter
+from requests.exceptions import HTTPError
+from loguru import logger
+
+try:  # optional progress bars
+	from tqdm.auto import tqdm as _tqdm
+except ImportError:  # pragma: no cover - tqdm is optional
+	_tqdm = None
+
+
+def _set_log_level(level: str) -> None:
+	"""Configure the loguru logger handlers to honour ``level``.
+
+	This is intended for the CLI entry point; the library itself does not call
+	it on import, so importing :mod:`pyfigshare` will not change a host
+	application's existing loguru configuration.
+	"""
+	try:
+		logger.remove()
+	except ValueError:
+		pass
+	logger.add(sys.stderr, level=level)
+
+
+def _redact_body(content: bytes, token: Optional[str]) -> str:
+	try:
+		text = content.decode("utf-8", errors="replace")
+	except Exception:
+		return repr(content)
+	if token:
+		text = text.replace(token, "<REDACTED>")
+	return text[:2000]
+
+
+def download_worker(url: str, path: str) -> str:
 	dirname = os.path.dirname(path)
-	if not os.path.exists(dirname):
+	if dirname and not os.path.exists(dirname):
 		os.makedirs(dirname, exist_ok=True)
 	if os.path.exists(path):
 		logger.info(f"{path} existed")
@@ -28,40 +65,71 @@ def download_worker(url, path):
 	return path
 
 class Figshare:
-	def __init__(self, token=None, private=True,
-				 chunk_size=20,threshold=18):
-		"""
-		figshare class
+	def __init__(
+		self,
+		token: Optional[str] = None,
+		private: bool = True,
+		chunk_size: int = 20,
+		threshold: int = 18,
+		upload_workers: int = 4,
+		max_retries: int = 5,
+		retry_backoff: float = 1.0,
+		mid_publish: bool = False,
+	):
+		"""figshare client.
 
 		Parameters
 		----------
-		token : str
-			if token has already been written to ~/.figshare/token,
-			this parameter can be ignored.
+		token : str, optional
+			Personal token. If ``None``, read from ``~/.figshare/token`` (or the
+			``FIGSHARE_TOKEN`` environment variable).
 		private : bool
-			whether to read or write private article, set to False if downloading
-			public articles.
-		chunk_size: int
-			chunk size for uploading (in Mb), default is 20MB
+			Whether subsequent reads/writes target the private (account) endpoints.
+		chunk_size : int
+			Local read chunk in MB used when computing md5 / size.
+		threshold : int
+			Quota (in GB) above which ``mid_publish`` will publish the article
+			in the middle of an upload to free space. Only honoured when
+			``mid_publish=True``.
+		upload_workers : int
+			Threads used to upload the parts of a single file in parallel.
+		max_retries : int
+			Retries per part on transient errors (5xx / 429 / connection).
+		retry_backoff : float
+			Base seconds for exponential backoff between part-upload retries.
+		mid_publish : bool
+			If True, auto-publish the article when used quota crosses
+			``threshold`` (legacy behaviour). Default is False, which is safer
+			because publishing is irreversible.
 		"""
+		if chunk_size <= 0:
+			raise ValueError("chunk_size must be > 0")
+		if upload_workers < 1:
+			raise ValueError("upload_workers must be >= 1")
+		if max_retries < 0:
+			raise ValueError("max_retries must be >= 0")
 		self.baseurl = "https://api.figshare.com/v2/{endpoint}"
-		self.token_path=os.path.expanduser("~/.figshare/token")
+		self.token_path = os.path.expanduser("~/.figshare/token")
+		if token is None:
+			token = os.environ.get("FIGSHARE_TOKEN")
 		if token is None:
 			if os.path.exists(self.token_path):
-				with open(self.token_path,'r') as f:
-					token=f.read().strip()
-				self.token = token
+				self._warn_if_token_world_readable(self.token_path)
+				with open(self.token_path, 'r') as f:
+					token = f.read().strip()
 			else:
-				raise ValueError("Please write figshare token to ~/.figshare/token")
-		else:
-			self.token=token
-			if not os.path.exists(self.token_path):
-				logger.info("writing token to ~/.figshare/token")
-				with open(self.token_path, 'w') as f:
-					f.write(token)
+				raise ValueError(
+					"No figshare token provided. Pass `token=...`, set the "
+					"FIGSHARE_TOKEN env var, or run `figshare set-token`."
+				)
+		self.token = token
 		self.private = private
-		self.chunk_size=chunk_size*1024*1024
-		self.threshold=threshold
+		self.chunk_size = int(chunk_size) * 1024 * 1024
+		self.threshold = threshold
+		self.upload_workers = int(upload_workers)
+		self.max_retries = int(max_retries)
+		self.retry_backoff = float(retry_backoff)
+		self.mid_publish = bool(mid_publish)
 		self.value_attrs = ['title', 'description', 'is_metadata_record', 'metadata_reason',
 					   'defined_type', 'funding', 'license', 'doi', 'handle', 'resource_doi',
 					   'resource_title', 'group_id']
@@ -69,28 +137,61 @@ class Figshare:
 					  'categories_by_source_id', 'authors',
 					  'custom_fields_list', 'funding_list']
 		self.dict_attrs = ['custom_fields', 'timeline']
-		self.valid_attrs=self.value_attrs+self.list_attrs+self.dict_attrs
-		self.max_quota=20
-		self.existed_files=[]
-		self.target_folder=None
+		self.valid_attrs = self.value_attrs + self.list_attrs + self.dict_attrs
+		self.max_quota = 20
+		# {name: {"id": int, "md5": str, "size": int}}
+		self.existed_files: Dict[str, Dict[str, Any]] = {}
+		self.target_folder: Optional[str] = None
+		# Lock guarding mutations of `existed_files` from worker threads.
+		self._existed_files_lock = threading.Lock()
+		# Optional progress callback: called as cb(event, **kwargs).
+		self.progress_cb: Optional[Callable[..., None]] = None
+		# Persistent HTTP session with a connection pool sized for our worker
+		# count, so concurrent part PUTs don't repeatedly redo the TLS handshake.
+		self.session = requests.Session()
+		pool = max(self.upload_workers * 2, 4)
+		adapter = HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
+		self.session.mount("https://", adapter)
+		self.session.mount("http://", adapter)
+		self.session.headers.update({"Authorization": f"token {self.token}"})
+
+	@staticmethod
+	def _warn_if_token_world_readable(path):
+		try:
+			mode = os.stat(path).st_mode
+		except OSError:
+			return
+		if mode & (stat.S_IRWXG | stat.S_IRWXO):
+			logger.warning(
+				f"Token file {path} is accessible by group/other; "
+				"consider `chmod 600` to protect it."
+			)
 
 	def raw_issue_request(self, method, url, data=None, binary=False):
-		# print(url)
-		headers = {'Authorization': 'token ' + self.token}
+		# Authorization header is set on the session; no need to repeat it here.
 		if data is not None and not binary:
 			data = json.dumps(data)
-		response = requests.request(method, url, headers=headers, data=data)
+		response = self.session.request(method, url, data=data)
 		try:
 			response.raise_for_status()
 			try:
-				data = json.loads(response.content)
+				parsed = json.loads(response.content)
 			except ValueError:
-				data = response.content
+				parsed = response.content
 		except HTTPError as error:
 			logger.warning(error)
-			logger.info('Body:\n', response.content)
+			logger.debug(f"Body: {_redact_body(response.content, self.token)}")
 			raise
-		return data
+		return parsed
+
+	def _retry_after(self, response: "requests.Response") -> Optional[float]:
+		hdr = response.headers.get("Retry-After") if response is not None else None
+		if not hdr:
+			return None
+		try:
+			return max(0.0, float(hdr))
+		except (TypeError, ValueError):
+			return None
 
 	def issue_request(self, method, endpoint, *args, **kwargs):
 		return self.raw_issue_request(method, self.baseurl.format(endpoint=endpoint), *args, **kwargs)
@@ -111,27 +212,8 @@ class Figshare:
 		result = self.issue_request('GET', endpoint)
 		return result
 
-	def list_files(self, article_id,version=None, private=None,show=True):
-		# if version is None:
-		# 	if private:
-		# 		endpoint="account/articles/{}/files".format(article_id)
-		# 	else:
-		# 		endpoint="articles/{}/files".format(article_id)
-		# 	result = self.issue_request('GET', endpoint)
-		# 	if show:
-		# 		logger.info('Listing files for article {}:'.format(article_id))
-		# 	if result:
-		# 		for item in result:
-		# 			if show:
-		# 				logger.info('  {id} - {name}'.format(**item))
-		# 	else:
-		# 		if show:
-		# 			logger.warning('  No files.')
-		# 	return result
-		# else:
-		# 	request = self.get_article(article_id, version)
-		# 	return request['files']
-		request = self.get_article(article_id, version,private)
+	def list_files(self, article_id, version=None, private=None, show=True):
+		request = self.get_article(article_id, version, private)
 		if show:
 			for item in request['files']:
 				logger.info('  {id} - {name}'.format(**item))
@@ -285,7 +367,7 @@ class Figshare:
 			logger.warning(f"Those keys were invalid: {invalid_keys} and will be ignored")
 
 		result = self.issue_request('POST', 'account/articles', data=data)
-		logger.info('Created article:', result['location'], '\n')
+		logger.info(f"Created article: {result['location']}")
 		result = self.raw_issue_request('GET', result['location'])
 		return result['id']
 
@@ -426,36 +508,53 @@ class Figshare:
 				data = fin.read(self.chunk_size)
 			return md5.hexdigest(), size
 
-	def initiate_new_upload(self, article_id, file_path,folder_name=None):
+	def initiate_new_upload(self, article_id, file_path,folder_name=None,overwrite=False):
 		basename = os.path.basename(file_path) #.replace(' ','_')
-		if not folder_name is None:
+		if folder_name is not None:
 			name = f"{folder_name}/{basename}"
 		else:
 			name = basename
-		if not self.target_folder is None:
+		if self.target_folder is not None:
 			name=f"{self.target_folder}/{name}"
-		if name in self.existed_files:
-			return None
-		endpoint = 'account/articles/{}/files'
-		endpoint = endpoint.format(article_id)
+		# Compute local checksum/size up front so we can compare with the remote
+		# file (when `overwrite=True`) before doing any deletion or upload.
 		md5, size = self.get_file_check_data(file_path)
 		if size == 0:
 			return False
-		# check whether there is enough quota before initiating new upload
-		quota_used=self.get_used_quota_private()
-		if quota_used > self.threshold or quota_used+size/1024/1024/1024 > self.max_quota:
-			logger.info(f"used quota is {quota_used}, try to publish article.")
+		if name in self.existed_files:
+			if not overwrite:
+				return None
+			remote = self.existed_files[name]
+			remote_md5 = remote.get('md5') if isinstance(remote, dict) else None
+			remote_size = remote.get('size') if isinstance(remote, dict) else None
+			if remote_md5 and remote_md5 == md5 and remote_size == size:
+				logger.info(f"Identical file already on figshare, skipped: {name}")
+				return None
+			old_file_id = remote['id'] if isinstance(remote, dict) else remote
+			logger.info(f"Overwriting existing file: {name} (id={old_file_id})")
 			try:
-				result=self.publish(article_id) # publish article
-			except:
-				logger.warning("Failed to publish, please publish manually")
-				print(f"article_id:{article_id}")
+				self.delete_file(article_id, old_file_id)
+			except Exception as e:
+				logger.warning(f"Failed to delete existing file {name}: {e}")
+			del self.existed_files[name]
+		endpoint = 'account/articles/{}/files'.format(article_id)
+		# check whether there is enough quota before initiating new upload
+		if self.mid_publish:
+			quota_used = self.get_used_quota_private()
+			if quota_used > self.threshold or quota_used + size / 1024 / 1024 / 1024 > self.max_quota:
+				logger.info(f"used quota is {quota_used} GB, publishing article to free space.")
+				try:
+					self.publish(article_id)
+				except Exception as e:
+					logger.warning(f"Failed to publish article {article_id}: {e}. Please publish manually.")
 		data = {'name':name,'md5': md5,'size': size}
 		try:
 			result = self.issue_request('POST', endpoint, data=data)
-		except:
-			logger.debug(f"Unknown error for: file_path: {file_path}, name: {name}, size: {size}")
-		# logger.info('Initiated file upload:', result['location'], '\n')
+		except Exception as e:
+			logger.error(
+				f"Failed to initiate upload (file_path={file_path}, name={name}, size={size}): {e}"
+			)
+			raise
 		result = self.raw_issue_request('GET', result['location'])
 		return result
 
@@ -464,11 +563,30 @@ class Figshare:
 
 	def upload_parts(self, file_path, file_info):
 		url = '{upload_url}'.format(**file_info)
-		result = self.raw_issue_request('GET', url)
-		# print('Uploading parts:')
-		with open(file_path, 'rb') as fin:
-			for part in result['parts']:
+		parts = self.raw_issue_request('GET', url)['parts']
+		workers = min(self.upload_workers, len(parts)) if parts else 1
+		cb = self.progress_cb
+		if cb:
+			cb('parts_total', name=file_info.get('name'), n=len(parts))
+		if workers <= 1:
+			with open(file_path, 'rb') as fin:
+				for part in parts:
+					self.upload_part(file_info, fin, part)
+					if cb:
+						cb('part_done', name=file_info.get('name'))
+			return
+		# Parallel path: each worker opens its own file handle so seeks don't
+		# race. Failures are surfaced by re-raising the first one.
+		logger.debug(f"Uploading {len(parts)} parts with {workers} workers: {file_path}")
+		def _do(part):
+			with open(file_path, 'rb') as fin:
 				self.upload_part(file_info, fin, part)
+		with ThreadPoolExecutor(max_workers=workers) as pool:
+			futures = [pool.submit(_do, p) for p in parts]
+			for fut in as_completed(futures):
+				fut.result()  # propagate exceptions
+				if cb:
+					cb('part_done', name=file_info.get('name'))
 
 	def upload_part(self, file_info, stream, part):
 		udata = file_info.copy()
@@ -476,20 +594,49 @@ class Figshare:
 		url = '{upload_url}/{partNo}'.format(**udata)
 		stream.seek(part['startOffset'])
 		data = stream.read(part['endOffset'] - part['startOffset'] + 1)
-		self.raw_issue_request('PUT', url, data=data, binary=True)
-		# print(' Uploaded part {partNo} from {startOffset} to {endOffset}'.format(**part))
+		self._put_part_with_retry(url, data, part_no=part.get('partNo'))
 
-	def upload_file(self,article_id, file_path,folder_name=None):
+	def _put_part_with_retry(self, url, data, part_no=None):
+		"""PUT a single part with exponential-backoff retries on transient errors."""
+		last_exc: Optional[BaseException] = None
+		for attempt in range(self.max_retries + 1):
+			wait_override: Optional[float] = None
+			try:
+				self.raw_issue_request('PUT', url, data=data, binary=True)
+				return
+			except HTTPError as e:
+				resp = getattr(e, 'response', None)
+				status = getattr(resp, 'status_code', None)
+				# Retry on 5xx and 429; bail out on 4xx (auth, bad request, etc.).
+				if status is not None and status < 500 and status != 429:
+					raise
+				wait_override = self._retry_after(resp)
+				last_exc = e
+			except (requests.ConnectionError, requests.Timeout) as e:
+				last_exc = e
+			if attempt < self.max_retries:
+				if wait_override is not None:
+					delay = wait_override + random.uniform(0, 0.5)
+				else:
+					delay = self.retry_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+				logger.warning(
+					f"part {part_no} upload failed (attempt {attempt+1}/{self.max_retries+1}): "
+					f"{last_exc}; retrying in {delay:.1f}s"
+				)
+				time.sleep(delay)
+		assert last_exc is not None
+		raise last_exc
+
+	def upload_file(self,article_id, file_path,folder_name=None,overwrite=False):
 		# Then we upload the file.
 		try:
-			file_info = self.initiate_new_upload(article_id, file_path,folder_name)
-		except:
-			logger.error(f"Error for file: {file_path}, skipped..")
+			file_info = self.initiate_new_upload(article_id, file_path,folder_name,overwrite=overwrite)
+		except Exception as e:
+			logger.error(f"Error for file {file_path}, skipped: {e}")
 			return None
 		if file_info is None:
-			logger.info(f"File existed, skipped: {file_path}")
 			return None
-		if file_info==False:
+		if file_info is False:
 			logger.info(f"File size is 0, skipped: {file_path}")
 			return None
 		logger.info(file_path)
@@ -497,13 +644,20 @@ class Figshare:
 		self.upload_parts(file_path,file_info)
 		# We return to the figshare API to complete the file upload process.
 		self.complete_upload(article_id, file_info['id'])
-		# self.list_files(article_id)
+		# Refresh the in-memory cache so that subsequent uploads in the same
+		# call see this file as already-existing (esp. for overwrite=True).
+		with self._existed_files_lock:
+			self.existed_files[file_info['name']] = {
+				'id': file_info['id'],
+				'md5': file_info.get('computed_md5') or file_info.get('supplied_md5'),
+				'size': file_info.get('size'),
+			}
 
-	def upload_folder(self,article_id, file_path,pre_folder_name=None): #file_path is a directory
+	def upload_folder(self,article_id, file_path,pre_folder_name=None,overwrite=False): #file_path is a directory
 		logger.debug(f"dir: {file_path}")
 		assert os.path.isdir(file_path), 'file_path must be a folder'
 		folder_name = os.path.basename(file_path)
-		if not pre_folder_name is None:
+		if pre_folder_name is not None:
 			cur_folder_name=f"{pre_folder_name}/{folder_name}"
 		else:
 			cur_folder_name=folder_name
@@ -511,25 +665,68 @@ class Figshare:
 		for file in os.listdir(file_path):
 			new_file_path=os.path.join(file_path,file)
 			if os.path.isfile(new_file_path):
-				self.upload_file(article_id, new_file_path,cur_folder_name)
+				self.upload_file(article_id, new_file_path,cur_folder_name,overwrite=overwrite)
 			elif os.path.isdir(new_file_path): # new file path is still a folder, level 2 folder.
-				self.upload_folder(article_id, new_file_path,cur_folder_name)
+				self.upload_folder(article_id, new_file_path,cur_folder_name,overwrite=overwrite)
 			else:
 				logger.warning(f"{new_file_path} is not dir, neither file, not recognized")
 
 	def check_files(self,article_id):
 		res = self.list_files(article_id, show=False)
-		self.existed_files = [r['name'] for r in res]
+		self.existed_files = {
+			r['name']: {
+				'id': r['id'],
+				'md5': r.get('computed_md5') or r.get('supplied_md5'),
+				'size': r.get('size'),
+			}
+			for r in res
+		}
 		logger.debug(self.existed_files)
 
-	def upload(self,article_id, file_path):
-		# logger.debug(self.existed_files)
+	def upload(self, article_id, file_path, overwrite=False, file_workers=1):
+		"""Upload a file or directory to ``article_id``.
+
+		When ``file_workers > 1`` and ``file_path`` is a directory, files inside
+		it (recursively) are uploaded concurrently using a thread pool. Each
+		file still uses ``upload_workers`` for its part-level parallelism.
+		"""
 		if os.path.isdir(file_path):
-			self.upload_folder(article_id, file_path)
-		elif os.path.isfile(file_path): #file
-			self.upload_file(article_id, file_path)
+			if file_workers and file_workers > 1:
+				specs = []
+				self._collect_files(file_path, pre_folder_name=None, out=specs)
+				self._upload_specs(article_id, specs, overwrite=overwrite,
+								   file_workers=file_workers)
+			else:
+				self.upload_folder(article_id, file_path, overwrite=overwrite)
+		elif os.path.isfile(file_path):
+			self.upload_file(article_id, file_path, overwrite=overwrite)
 		else:
 			logger.warning(f"{file_path} is not dir, neither file, not recognized")
+
+	def _collect_files(self, file_path, pre_folder_name, out):
+		assert os.path.isdir(file_path)
+		folder_name = os.path.basename(file_path)
+		cur = f"{pre_folder_name}/{folder_name}" if pre_folder_name else folder_name
+		for entry in os.listdir(file_path):
+			new_path = os.path.join(file_path, entry)
+			if os.path.isfile(new_path):
+				out.append((new_path, cur))
+			elif os.path.isdir(new_path):
+				self._collect_files(new_path, cur, out)
+
+	def _upload_specs(self, article_id, specs, overwrite, file_workers):
+		logger.info(f"Uploading {len(specs)} files with file_workers={file_workers}")
+		with ThreadPoolExecutor(max_workers=file_workers) as pool:
+			futures = {
+				pool.submit(self.upload_file, article_id, p, folder, overwrite): p
+				for (p, folder) in specs
+			}
+			for fut in as_completed(futures):
+				path = futures[fut]
+				try:
+					fut.result()
+				except Exception as e:
+					logger.error(f"Upload failed for {path}: {e}")
 
 	def publish(self,article_id):
 		endpoint = 'account/articles/{}/publish'.format(article_id)
@@ -554,70 +751,185 @@ class Figshare:
 		return result['used_quota_private'] / 1024 / 1024 / 1024
 
 def upload(
-	input_path="./",
-	title='title', description='description',
-	token=None,output="figshare.tsv",publish=True,
-	threshold=18,chunk_size=20,
-	level='INFO',target_folder=None):
-	"""
-	Upload files or directory to figshare
+	input_path: str = "./",
+	title: str = 'title',
+	description: str = 'description',
+	token: Optional[str] = None,
+	output: str = "figshare.tsv",
+	publish: bool = True,
+	threshold: int = 18,
+	chunk_size: int = 20,
+	level: Optional[str] = None,
+	target_folder: Optional[str] = None,
+	overwrite: bool = False,
+	upload_workers: int = 4,
+	max_retries: int = 5,
+	file_workers: int = 1,
+	mid_publish: bool = False,
+	dry_run: bool = False,
+	failed_output: Optional[str] = None,
+	progress: bool = False,
+) -> None:
+	"""Upload files or directories to a figshare article.
+
+	When the input is a directory and ``file_workers > 1``, files are walked
+	recursively and uploaded concurrently. Each file still uses
+	``upload_workers`` for its own part-level parallelism.
 
 	Parameters
 	----------
 	input_path : str
-		folder name, or single file path, or file pattern passed to glob (should be
-		quote using "", and * must be included).
-	title : str
-		article title, if not existed this article, it will be created.
-	description : str
-		article description.
-	token : str
-		If ~/.figshare/token existed, this paramter can be ignored.
+		File path, directory, or quoted glob pattern (e.g. ``"./data/*.csv"``).
+	title, description : str
+		Article metadata; the article is created if it doesn't already exist.
+	token : str, optional
+		Figshare token; falls back to ``FIGSHARE_TOKEN`` env var or
+		``~/.figshare/token``.
 	output : path
-		After the uploading is finished, the file id,url and filename will be
-		written into this output file.
-	rewrite : bool
-		whether to overwrite the files on figshare if existed.
-	threshold : int [GB]
-		There is only 20 GB availabel for private storage, when uploading a
-		big datasets (>20Gb), if the total quota usage is grater than  this
-		threshold, the article will be published so that the 20GB usaged quata
-		will be reset to 0.
-	chunk_size: int
-		chunk size for uploading [20 MB]
-	level: str
-		loguru log level: DEBUG, INFO, WARNING, ERROR
-
-	Returns
-	-------
-
+		TSV listing successfully-uploaded files (``name, file_id, url``).
+	publish : bool
+		Publish the article when uploading is finished.
+	threshold : int
+		Quota threshold (GB); only honoured when ``mid_publish=True``.
+	chunk_size : int
+		Local md5/size hashing chunk in MB.
+	level : str, optional
+		If set, reconfigure the loguru logger to this level. Library callers
+		should leave this as ``None``; the CLI sets it explicitly.
+	target_folder : str, optional
+		Remote folder prefix for all uploaded files.
+	overwrite : bool
+		Replace remote files of the same name (md5+size match still skips).
+	upload_workers : int
+		Threads per file for part-level uploads.
+	max_retries : int
+		Retries per part on transient errors.
+	file_workers : int
+		Concurrent files when ``input_path`` is a directory.
+	mid_publish : bool
+		If True, auto-publish in the middle of an upload when the quota would
+		overflow. Default False (safer).
+	dry_run : bool
+		Compute md5/size for each input file and report what would be uploaded
+		without creating the article or transferring data.
+	failed_output : path, optional
+		If set, write failed (path, error) entries to this TSV.
+	progress : bool
+		Show tqdm progress bars (requires the ``tqdm`` package).
 	"""
-	logger.level = level
+	if level is not None:
+		_set_log_level(level)
 	input_path = os.path.abspath(os.path.expanduser(input_path))
 	if "*" not in input_path and os.path.isdir(input_path):
-		input_files=[os.path.join(input_path,file) for file in os.listdir(input_path)] # including file and folder
+		input_files = [os.path.join(input_path, f) for f in os.listdir(input_path)]
 	elif "*" in input_path:
-		input_files=glob.glob(input_path)
+		input_files = sorted(glob.glob(input_path))
 	else:
-		input_files=[input_path]
-	fs = Figshare(token=token,chunk_size=chunk_size,threshold=threshold)
+		if not os.path.exists(input_path):
+			raise FileNotFoundError(f"input_path does not exist: {input_path}")
+		input_files = [input_path]
+	if not input_files:
+		logger.warning(f"No input files matched: {input_path}")
+		return
+
+	if dry_run:
+		_dry_run_report(input_files, target_folder=target_folder, chunk_size=chunk_size)
+		return
+
+	fs = Figshare(
+		token=token,
+		chunk_size=chunk_size,
+		threshold=threshold,
+		upload_workers=upload_workers,
+		max_retries=max_retries,
+		mid_publish=mid_publish,
+	)
 	r = fs.search_articles(title=title)
 	if len(r) == 0:
-		logger.info(f"article: {title} not found, create it")
+		logger.info(f"article: {title!r} not found, creating it")
 		article_id = fs.create_article(title=title, description=description)
 	else:
-		logger.info(f"found existed article")
-		article_id = r[0]['id'] #article id
-		# fs.private=False
+		logger.info("found existing article")
+		article_id = r[0]['id']
 
 	fs.check_files(article_id)
 	fs.target_folder = target_folder
-	for file_path in input_files:
-		fs.upload(article_id, file_path)
+
+	progress_bar = None
+	if progress and _tqdm is not None:
+		progress_bar = _tqdm(total=0, unit="part", desc="upload", dynamic_ncols=True)
+
+		def _cb(event, **kwargs):
+			if event == 'parts_total':
+				progress_bar.total = (progress_bar.total or 0) + kwargs.get('n', 0)
+				progress_bar.refresh()
+			elif event == 'part_done':
+				progress_bar.update(1)
+		fs.progress_cb = _cb
+	elif progress and _tqdm is None:
+		logger.warning("`progress=True` requested but tqdm is not installed; "
+					   "install with `pip install tqdm`.")
+
+	failed: List[Tuple[str, str]] = []
+	try:
+		for file_path in input_files:
+			try:
+				fs.upload(article_id, file_path, overwrite=overwrite,
+						  file_workers=file_workers)
+			except Exception as e:
+				logger.error(f"Upload failed for {file_path}: {e}")
+				failed.append((file_path, str(e)))
+	finally:
+		if progress_bar is not None:
+			progress_bar.close()
+
+	if failed and failed_output:
+		with open(os.path.expanduser(failed_output), "w") as fh:
+			fh.write("path\terror\n")
+			for path, err in failed:
+				fh.write(f"{path}\t{err}\n")
+		logger.warning(f"Wrote {len(failed)} failure(s) to {failed_output}")
+
 	if publish:
-		fs.publish(article_id) #publish article after the uploading is done.
+		fs.publish(article_id)
 	list_files(article_id, private=False, output=os.path.expanduser(output))
 	logger.info(f"See {output} for the detail information of the uploaded files")
+
+
+def _dry_run_report(input_files, target_folder, chunk_size):
+	"""Print what an upload run would do without contacting figshare."""
+	def walk(p):
+		if os.path.isfile(p):
+			yield p
+		elif os.path.isdir(p):
+			for root, _, files in os.walk(p):
+				for f in files:
+					yield os.path.join(root, f)
+
+	def _md5(path, chunk):
+		h = hashlib.md5()
+		size = 0
+		with open(path, "rb") as fh:
+			while True:
+				buf = fh.read(chunk)
+				if not buf:
+					break
+				size += len(buf)
+				h.update(buf)
+		return h.hexdigest(), size
+
+	chunk = chunk_size * 1024 * 1024
+	total = 0
+	sys.stdout.write("path\tremote_name\tsize\tmd5\n")
+	for base in input_files:
+		for p in walk(base):
+			rel = os.path.relpath(p, os.path.dirname(base)) if os.path.isdir(base) else os.path.basename(p)
+			rel = rel.replace(os.sep, "/")
+			name = f"{target_folder}/{rel}" if target_folder else rel
+			md5, size = _md5(p, chunk)
+			total += size
+			sys.stdout.write(f"{p}\t{name}\t{size}\t{md5}\n")
+	logger.info(f"dry-run total: {total/1024/1024:.1f} MiB")
 
 def list_files(article_id,private=False,version=None,output=None):
 	"""
@@ -646,15 +958,10 @@ def list_files(article_id,private=False,version=None,output=None):
 		url = "https://figshare.com/ndownloader/files/" + str(r['id'])
 		R.append([r['name'], r['id'], url])
 	df = pd.DataFrame(R, columns=['file', 'file_id', 'url'])
-	if not output is None:
+	if output is not None:
 		df.to_csv(output, sep='\t', index=False)
 	else:
-		sys.stdout.write('\t'.join([str(i) for i in df.columns.tolist()]) + '\n')
-		for i, row in df.iterrows():
-			try:
-				sys.stdout.write('\t'.join([str(i) for i in row.tolist()]) + '\n')
-			except:
-				sys.stdout.close()
+		df.to_csv(sys.stdout, sep='\t', index=False)
 
 def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	"""
@@ -678,5 +985,5 @@ def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	fs.download_article(article_id, outdir=outdir,cpu=cpu,folder=folder)
 
 if __name__ == "__main__":
-	fire.core.Display = lambda lines, out: print(*lines, file=out)
-	fire.Fire(serialize=lambda x:print(x) if not x is None else print(""))
+	from .cli import main
+	sys.exit(main())

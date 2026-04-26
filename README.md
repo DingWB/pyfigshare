@@ -1,236 +1,194 @@
-# Installation
-```shell
-pip install git+https://github.com/DingWB/pyfigshare.git
-reinstall
-pip uninstall -y pyfigshare &&  pip install git+https://github.com/DingWB/pyfigshare.git
+# pyfigshare
 
-# or
+[![PyPI version](https://img.shields.io/pypi/v/pyfigshare.svg)](https://pypi.org/project/pyfigshare/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyfigshare.svg)](https://pypi.org/project/pyfigshare/)
+[![License](https://img.shields.io/pypi/l/pyfigshare.svg)](https://github.com/DingWB/pyfigshare/blob/main/LICENSE)
+
+A small Python package and command-line tool for interacting with the
+[figshare](https://figshare.com) API: upload files / folders to private
+articles, list and download public/private articles, manage quota, and so on.
+
+Highlights:
+
+- Robust uploads with **per-file part-level parallelism** plus optional
+  **multi-file parallelism**, and automatic **retry with exponential backoff**
+  on transient errors (5xx / 429 / network). Honours `Retry-After`.
+- Smart `--overwrite`: identical files (same md5+size) are skipped, different
+  files replace the remote one.
+- Modern **`argparse` CLI** with discoverable subcommands (no more `fire`).
+- Safe destructive operations: every `delete-*` command requires `--yes`.
+- Library-friendly: importing `pyfigshare` does **not** mutate your loguru
+  configuration or write any files.
+
+## Installation
+
+```bash
 pip install pyfigshare
+# or from source
+pip install git+https://github.com/DingWB/pyfigshare.git
 ```
 
-# Usage
-## (1). setup token
-Login to https://figshare.com, create account, click profile -> integrations -> Applications -> Create Personal Tokens
-```
-mkdir -p ~/.figshare
-vim ~/.figshare/token
-# paste the personal token in ~/.figshare/token
-```
-Alternatively, instead paste the token into ~/.figshare/token, one can also pass parameter token to Figshare class.
+Requirements: Python 3.8+, `pandas`, `requests`, `loguru`. For progress bars
+(`--progress`), also install `tqdm`. For running the test suite, install
+`pytest` and `responses`.
 
-## (2). Create article and upload files onto figshare
-```shell
-figshare upload -h
-```
-```text
-INFO: Showing help with the command 'figshare upload -- --help'.
+## Setting up your token
 
-NAME
-    figshare upload - Upload files or directory to figshare
+Create a personal token at
+[figshare → profile → Applications → Create Personal Token](https://figshare.com),
+then use any of:
 
-SYNOPSIS
-    figshare upload <flags>
+```bash
+# 1. preferred: store it in ~/.figshare/token (chmod 600)
+figshare set-token --token YOUR_TOKEN
 
-DESCRIPTION
-    Upload files or directory to figshare
+# 2. pipe it
+echo YOUR_TOKEN | figshare set-token
 
-FLAGS
-    -i, --input_path=INPUT_PATH
-        Default: './'
-        folder name, or single file path, or file pattern passed to glob (should be quote using "", and * must be included).
-    --title=TITLE
-        Default: 'title'
-        article title, if not existed this article, it will be created.
-    -d, --description=DESCRIPTION
-        Default: 'description'
-        article description.
-    --token=TOKEN
-        Type: Optional[]
-        Default: None
-        If ~/.figshare/token existed, this paramter can be ignored.
-    -o, --output=OUTPUT
-        Default: 'figshare.tsv'
-        After the uploading is finished, the file id,url and filename will be written into this output file.
-    --threshold=THRESHOLD
-        Default: 15
-        There is only 20 GB availabel for private storage, when uploading a big datasets (>20Gb), if the total quota usage is grater than  this threshold, the article will be published so that the 20GB usaged quata will be reset to 0.
-    -c, --chunk_size=CHUNK_SIZE
-        Default: 20
-        chunk size for uploading [20 MB]
-    -l, --level=LEVEL
-        Default: 'INFO'
-        loguru log level: DEBUG, INFO, WARNING, ERROR
-```
-```shell
-# To use the command line, one have to paste token into ~/.figshare/token
-figshare upload -i test_data/ --title test1
-figshare upload -i MajorType/ --title MajorType --threshold 13 -c 100 -d "MajorType allc files"
-# upload folder test_data onto figshare and give a title "test1"
+# 3. environment variable (per-shell)
+export FIGSHARE_TOKEN=YOUR_TOKEN
+figshare list-articles
+
+# 4. pass --token to every command
+figshare list-articles --token YOUR_TOKEN
 ```
 
-## (3) Get private or public article information 
-### List private or public article file names
-```shell
-figshare list_files 9273710
-```
-```text
-Listing files for article 9273710:
-  16871153 - pone.0220029.s001.pdf
-  16871156 - pone.0220029.s002.pdf
-```
-### List article detail information
-```shell
-figshare Figshare --private False get_article -h
-```
-```text
-INFO: Showing help with the command 'figshare Figshare --private False get_article -- --help'.
+Resolution order: `--token` flag → `FIGSHARE_TOKEN` env var → `~/.figshare/token`.
 
-NAME
-    figshare Figshare --private False get_article
+`set-token` writes the token to `~/.figshare/token` with permissions `0600`.
+If that file already exists with looser permissions, every CLI run will print a
+warning.
 
-SYNOPSIS
-    figshare Figshare --private False get_article ARTICLE_ID <flags>
+## Quick start
 
-POSITIONAL ARGUMENTS
-    ARTICLE_ID
+```bash
+# 1. upload a directory to a new (or existing) article called "test1"
+figshare upload -i ./test_data --title test1
 
-FLAGS
-    -v, --version=VERSION
-        Type: Optional[]
-        Default: None
-    -p, --private=PRIVATE
-        Type: Optional[]
-        Default: None
+# 2. upload a glob with 8 parallel part-uploads, overwriting changed files,
+#    and don't auto-publish
+figshare upload -i "./MajorType/*.allc" \
+    --title MajorType -d "MajorType allc files" \
+    --upload-workers 8 --overwrite --no-publish
 
-NOTES
-    You can also use flags syntax for POSITIONAL ARGUMENTS
+# 3. download a public article
+figshare download 9273710 -o ./downloaded
+
+# 4. how full is my private quota?
+figshare quota
 ```
 
-```shell
-figshare Figshare --private False get_article 9273710
-```
-
-## (3) delete article
-### delete article with given article id
-```shell
-figshare Figshare --private True delete_article <article_id>
-```
-
-### delete article with given title
-```shell
-figshare Figshare --private True delete_articles_with_title test1
-```
-
-## (4) download all files for a given article id
-```shell
-figshare download 9273710 -o downlnoaded_data
-```
-
-## Other functions
-```shell
-figshare Figshare --private True -h
-```
+## CLI reference
 
 ```text
-INFO: Showing help with the command 'figshare Figshare --private True - -- --help'.
-
-NAME
-    figshare Figshare --private True
-
-SYNOPSIS
-    figshare Figshare --private True - GROUP | COMMAND | VALUE
-
-GROUPS
-    GROUP is one of the following:
-
-     dict_attrs
-
-     list_attrs
-
-     valid_attrs
-
-     value_attrs
-
-COMMANDS
-    COMMAND is one of the following:
-
-     author
-
-     complete_upload
-
-     create_article
-       Create a new article with attributes (see: https://docs.figsh.com/#private_article_create for detail), for example: { "title": "Test article title", "description": "Test description of article", "is_metadata_record": true, "metadata_reason": "hosted somewhere else", "tags": [ "tag1", "tag2" ], "keywords": [ "tag1", "tag2" ], "references": [ "http://figshare.com", "http://api.figshare.com" ], "related_materials": [ { "id": 10432, "identifier": "10.6084/m9.figshare.1407024", "identifier_type": "DOI", "relation": "IsSupplementTo", "title": "Figshare for institutions brochure", "is_linkout": false } ], "categories": [ 1, 10, 11 ], "categories_by_source_id": [ "300204", "400207" ], "authors": [ { "name": "John Doe" }, { "id": 1000008 } ], "custom_fields": { "defined_key": "value for it" }, "custom_fields_list": [ { "name": "key", "value": "value" } ], "defined_type": "media", "funding": "", "funding_list": [ { "id": 0, "title": "string" } ], "license": 1, "doi": "", "handle": "", "resource_doi": "", "resource_title": "", "timeline": { "firstOnline": "2015-12-31", "publisherPublication": "2015-12-31", "publisherAcceptance": "2015-12-31" }, "group_id": 0 }
-
-     delete_article
-
-     delete_articles_with_title
-
-     delete_file
-
-     download_article
-
-     get_account_info
-
-     get_article
-
-     get_author_id
-
-     get_file_check_data
-
-     get_file_details
-       Get the details about a file associated with a given article.
-
-     get_used_quota_private
-
-     initiate_new_upload
-
-     issue_request
-
-     list_article_versions
-
-     list_articles
-
-     list_files
-
-     publish
-
-     raw_issue_request
-
-     search_articles
-
-     update_article
-
-     upload
-
-     upload_file
-
-     upload_folder
-
-     upload_part
-
-     upload_parts
-
-VALUES
-    VALUE is one of the following:
-
-     baseurl
-
-     chunk_size
-       chunk size for uploading (in Mb), default is 20MB
-
-     max_quota
-
-     private
-       whether to read or write private article, set to False if downloading public articles.
-
-     threshold
-
-     token
-       if token has already been written to ~/.figshare/token, this parameter can be ignored.
-
-     token_path
+figshare <subcommand> [options]
+figshare --help
+figshare <subcommand> --help
 ```
 
-# More information
-https://help.figshare.com/article/how-to-use-the-figshare-api
-https://colab.research.google.com/drive/13CAM8mL1u7ZsqNhfZLv7bNb1rdhMI64d?usp=sharing#scrollTo=affected-source
+| Subcommand          | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `upload`            | Upload file / dir / glob to an article (creates if missing). |
+| `download`          | Download all files in an article (`--cpu`, `--folder`).      |
+| `list-files`        | List files in an article (TSV; `-o` to write to file).       |
+| `list-articles`     | List your private articles (`--json`).                       |
+| `search`            | Search articles by title (`--private`, `--json`).            |
+| `create-article`    | Create an empty private article, prints the new id.          |
+| `publish`           | Publish a private article.                                   |
+| `delete-article`    | Delete an article. Requires `--yes`.                         |
+| `delete-file`       | Delete a single file. Requires `--yes`.                      |
+| `delete-folder`     | Delete files under a remote folder. Requires `--yes`.        |
+| `delete-all-files`  | Delete every file in an article. Requires `--yes`.           |
+| `quota`             | Print used / max private quota in GB.                        |
+| `account`           | Print account info as JSON.                                  |
+| `get-article`       | Print article metadata as JSON.                              |
+| `set-token`         | Save token to `~/.figshare/token` with `chmod 600`.          |
+| `version`           | Print package version.                                       |
+
+Common options on every API-using subcommand:
+
+- `--token TOKEN` — override `~/.figshare/token`.
+- `--level {DEBUG,INFO,WARNING,ERROR,CRITICAL}` — log level.
+
+### `upload` options
+
+| Flag                       | Default        | Meaning |
+| -------------------------- | -------------- | ------- |
+| `-i, --input-path`         | `./`           | File, directory, or quoted glob (`"./data/*.csv"`). |
+| `-t, --title`              | `title`        | Article title; created if it doesn't exist. |
+| `-d, --description`        | `description`  | Used only when creating the article. |
+| `-o, --output`             | `figshare.tsv` | TSV with `(name, file_id, url)` for uploaded files. |
+| `--target-folder`          | `None`         | Optional remote folder prefix for all uploaded files. |
+| `--overwrite`              | off            | Replace remote files of the same name; identical (md5+size) files are still skipped. |
+| `--no-publish`             | off            | Do not publish the article when finished. |
+| `--threshold`              | `18`           | Quota threshold in GB; only honoured with `--mid-publish`. |
+| `--mid-publish`            | off            | Auto-publish article mid-run if quota crosses `--threshold` (irreversible). |
+| `--chunk-size`             | `20`           | Local md5/size hashing chunk in MB. |
+| `-w, --upload-workers`     | `4`            | Threads uploading parts of a single file in parallel. |
+| `-W, --file-workers`       | `1`            | Concurrent files when input is a directory. |
+| `--max-retries`            | `5`            | Retries per part on 5xx / 429 / connection errors (exp. backoff, honours `Retry-After`). |
+| `--dry-run`                | off            | Print `(path, remote_name, size, md5)` without contacting figshare. |
+| `--failed-output PATH`     | none           | Write failed `(path, error)` rows to this TSV. |
+| `--progress`               | off            | Show tqdm progress bars (requires `pip install tqdm`). |
+
+Every API-using subcommand also supports `-v` (DEBUG) and `-q` (WARNING) log
+shortcuts, and reads `FIGSHARE_TOKEN` from the environment as a fallback for
+`--token`.
+
+## Python API
+
+```python
+from pyfigshare import Figshare, upload, list_files, download
+
+fs = Figshare(token=None,             # or read from ~/.figshare/token
+              private=True,
+              chunk_size=20,           # MB read chunk for md5
+              upload_workers=8,        # part-level parallelism
+              max_retries=5)
+
+# create / find article and upload
+article_id = fs.create_article(title="my dataset", description="...")
+fs.check_files(article_id)             # populate the existed-files cache
+fs.upload(article_id, "./data", overwrite=True)
+fs.publish(article_id)
+
+# inspect
+print(fs.get_used_quota_private(), "GB used")
+for f in fs.list_files(article_id, show=False):
+    print(f["name"], f["id"])
+
+# download a public article in parallel
+download(9273710, private=False, outdir="./out", cpu=4)
+```
+
+## Notes on uploads
+
+- A single file is split into parts by figshare; each part is uploaded
+  concurrently by `upload_workers` threads, each with its own file handle.
+- When you upload a directory with `--file-workers N`, files are also
+  walked recursively and uploaded `N` at a time. Total in-flight PUTs is
+  roughly `file_workers * upload_workers`.
+- Failed parts retry with exponential backoff + jitter, and respect the
+  server's `Retry-After` header on 429 responses. Non-retriable HTTP errors
+  (auth, bad request, etc.) bail out immediately.
+- The `existed_files` cache stores `(id, md5, size)` per remote file so that
+  `--overwrite` can skip uploads when local and remote checksums match.
+- Mid-run `publish` is opt-in via `--mid-publish`. Without it, exceeding the
+  20 GB private quota will fail the upload — split your data across multiple
+  articles, or pass `--mid-publish --threshold 18` to keep the old behaviour.
+- Use `--dry-run` first to see exactly what would be sent.
+
+## Development
+
+```bash
+git clone https://github.com/DingWB/pyfigshare
+cd pyfigshare
+pip install -e .
+pip install pytest responses   # for tests
+pytest
+```
+
+## Links
+
+- figshare API docs: <https://docs.figshare.com>
+- API how-to: <https://help.figshare.com/article/how-to-use-the-figshare-api>
