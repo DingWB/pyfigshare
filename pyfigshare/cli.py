@@ -272,7 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     # upload
     p = sub.add_parser("upload", help="Upload files or directories to a figshare article.")
     _add_common_args(p)
-    p.add_argument("-i", "--input-path", default="./",
+    p.add_argument("-i", "--input_path", default="./",
                    help='File, directory, or glob pattern (quote globs, e.g. "./data/*.csv").')
     p.add_argument("-t", "--title", default="title",
                    help="Article title; created if it does not already exist.")
@@ -280,31 +280,31 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Article description (used only when the article is created).")
     p.add_argument("-o", "--output", default="figshare.tsv",
                    help="TSV file listing uploaded files (default: figshare.tsv).")
-    p.add_argument("--target-folder", default=None,
+    p.add_argument("--target_folder", default=None,
                    help="Optional remote folder prefix to place files under.")
     p.add_argument("--overwrite", action="store_true",
                    help="Overwrite remote files with the same name (md5 match is still skipped).")
-    p.add_argument("--no-publish", dest="publish", action="store_false",
+    p.add_argument("--no_publish", dest="publish", action="store_false",
                    help="Do NOT publish the article when uploading is finished.")
     p.set_defaults(publish=True)
     p.add_argument("--threshold", type=int, default=18,
                    help="Quota threshold in GB; publish mid-run if exceeded (default: 18).")
-    p.add_argument("--chunk-size", type=int, default=20,
+    p.add_argument("--chunk_size", type=int, default=20,
                    help="Local read chunk size in MB used for md5/size hashing (default: 20).")
-    p.add_argument("-w", "--upload-workers", type=int, default=4,
+    p.add_argument("-w", "--upload_workers", type=int, default=4,
                    help="Threads used to upload parts of a single file in parallel (default: 4).")
-    p.add_argument("-W", "--file-workers", type=int, default=1,
+    p.add_argument("-W", "--file_workers", type=int, default=1,
                    help="Concurrent files when input is a directory (default: 1).")
-    p.add_argument("--max-retries", type=int, default=5,
+    p.add_argument("--max_retries", type=int, default=5,
                    help="Retries per part on transient errors (default: 5).")
-    p.add_argument("--mid-publish", action="store_true",
+    p.add_argument("--mid_publish", action="store_true",
                    help="Auto-publish article mid-run if used quota crosses --threshold (irreversible).")
-    p.add_argument("--dry-run", action="store_true",
+    p.add_argument("--dry_run", action="store_true",
                    help="Show what would be uploaded (path, size, md5) without contacting figshare.")
-    p.add_argument("--failed-output", default=None,
+    p.add_argument("--failed_output", default=None,
                    help="If set, write a TSV of failed (path, error) entries here.")
     p.add_argument("--progress", action="store_true",
-                   help="Show tqdm progress bars (requires `pip install pyfigshare[progress]`).")
+                   help="Show tqdm progress bars (requires `pip install tqdm`).")
     p.set_defaults(func=cmd_upload)
 
     # download

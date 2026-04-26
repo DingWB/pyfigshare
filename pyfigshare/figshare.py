@@ -92,7 +92,11 @@ class Figshare:
 			in the middle of an upload to free space. Only honoured when
 			``mid_publish=True``.
 		upload_workers : int
-			Threads used to upload the parts of a single file in parallel.
+			Number of **threads** (``ThreadPoolExecutor``) used to upload the
+			parts of a *single* file in parallel. Threads share one
+			``requests.Session`` with a connection pool sized for this value, so
+			TLS connections are reused across part PUTs. Use threads (not
+			processes) because the bottleneck is network I/O.
 		max_retries : int
 			Retries per part on transient errors (5xx / 429 / connection).
 		retry_backoff : float
@@ -686,9 +690,22 @@ class Figshare:
 	def upload(self, article_id, file_path, overwrite=False, file_workers=1):
 		"""Upload a file or directory to ``article_id``.
 
-		When ``file_workers > 1`` and ``file_path`` is a directory, files inside
-		it (recursively) are uploaded concurrently using a thread pool. Each
-		file still uses ``upload_workers`` for its part-level parallelism.
+		Parameters
+		----------
+		article_id : int
+			Target figshare article id.
+		file_path : str
+			A single file or a directory. Directories are walked recursively.
+		overwrite : bool
+			If True, replace remote files of the same name. Files whose md5
+			and size already match the remote copy are still skipped.
+		file_workers : int
+			Number of **threads** (``ThreadPoolExecutor``) used to upload
+			*different files* concurrently when ``file_path`` is a directory.
+			Ignored for single-file uploads. Each file additionally uses
+			``self.upload_workers`` threads internally for its own parts, so
+			the maximum number of in-flight HTTP PUTs is roughly
+			``file_workers * upload_workers``.
 		"""
 		if os.path.isdir(file_path):
 			if file_workers and file_workers > 1:
@@ -772,9 +789,24 @@ def upload(
 ) -> None:
 	"""Upload files or directories to a figshare article.
 
-	When the input is a directory and ``file_workers > 1``, files are walked
-	recursively and uploaded concurrently. Each file still uses
-	``upload_workers`` for its own part-level parallelism.
+	Concurrency model
+	-----------------
+	Uploads use **two nested layers of threads** (both
+	``concurrent.futures.ThreadPoolExecutor``); processes are *not* used
+	here because the bottleneck is network I/O, not CPU.
+
+	- ``upload_workers`` (inner): threads that PUT the parts of a single
+	  file in parallel. They share one ``requests.Session`` so the TLS
+	  connection is reused across parts.
+	- ``file_workers`` (outer): threads that upload *different files*
+	  concurrently when the input is a directory. Ignored for single
+	  files.
+
+	The maximum number of in-flight HTTP PUTs is therefore roughly
+	``file_workers * upload_workers``. Setting either value too high can
+	trigger figshare's rate limit (HTTP 429); the client honours
+	``Retry-After`` and exponentially backs off, but throughput may not
+	improve past a few dozen concurrent connections.
 
 	Parameters
 	----------
@@ -801,11 +833,14 @@ def upload(
 	overwrite : bool
 		Replace remote files of the same name (md5+size match still skips).
 	upload_workers : int
-		Threads per file for part-level uploads.
+		Number of threads per file for part-level uploads (inner pool).
 	max_retries : int
-		Retries per part on transient errors.
+		Retries per part on transient errors (5xx / 429 / connection).
 	file_workers : int
-		Concurrent files when ``input_path`` is a directory.
+		Number of threads uploading *different files* concurrently (outer
+		pool); only used when ``input_path`` resolves to multiple files.
+		The total number of in-flight PUTs is approximately
+		``file_workers * upload_workers``.
 	mid_publish : bool
 		If True, auto-publish in the middle of an upload when the quota would
 		overflow. Default False (safer).
@@ -965,7 +1000,12 @@ def list_files(article_id,private=False,version=None,output=None):
 
 def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	"""
-	Download all files for a given figshare article id
+	Download all files for a given figshare article id.
+
+	Unlike :func:`upload`, downloads use a ``ProcessPoolExecutor`` (true
+	processes, hence the ``cpu`` parameter name) because each file is
+	fetched with ``urllib.request.urlretrieve`` independently and there is
+	no shared HTTP session to benefit from threads.
 
 	Parameters
 	----------
@@ -975,11 +1015,12 @@ def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	private : bool
 		whether this is a private article or not.
 	outdir : path
-		whether to store the downloaded files.
-
-	Returns
-	-------
-
+		directory where downloaded files will be written.
+	cpu : int
+		Number of **processes** to use for parallel downloads (default 1).
+	folder : str, optional
+		If set, only download files whose top-level remote folder equals
+		this name.
 	"""
 	fs = Figshare(private=private)
 	fs.download_article(article_id, outdir=outdir,cpu=cpu,folder=folder)
