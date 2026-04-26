@@ -92,11 +92,19 @@ class Figshare:
 			in the middle of an upload to free space. Only honoured when
 			``mid_publish=True``.
 		upload_workers : int
-			Number of **threads** (``ThreadPoolExecutor``) used to upload the
-			parts of a *single* file in parallel. Threads share one
-			``requests.Session`` with a connection pool sized for this value, so
-			TLS connections are reused across part PUTs. Use threads (not
-			processes) because the bottleneck is network I/O.
+			**Inner concurrency** — number of threads used to upload the parts
+			of a *single* file in parallel. Figshare splits each file into
+			parts; this controls how many parts are PUT at the same time.
+
+			Analogy: this is *"how many workers carry one box together"*
+			(parallelism within one file). Pair with ``file_workers`` on
+			:meth:`upload`/:func:`pyfigshare.upload` for *"how many boxes get
+			carried at once"* (parallelism across files).
+
+			Threads share one ``requests.Session`` so the TLS connection is
+			reused across part PUTs. Threads are used (not processes) because
+			the bottleneck is network I/O. Default 4. Increase for big files
+			on fast networks; setting it too high may trigger HTTP 429.
 		max_retries : int
 			Retries per part on transient errors (5xx / 429 / connection).
 		retry_backoff : float
@@ -690,6 +698,21 @@ class Figshare:
 	def upload(self, article_id, file_path, overwrite=False, file_workers=1):
 		"""Upload a file or directory to ``article_id``.
 
+		Concurrency cheat-sheet
+		-----------------------
+		``upload_workers`` (set on the ``Figshare`` instance) and
+		``file_workers`` (passed here) are **two independent thread pools**:
+
+		  - ``upload_workers`` = how many parts of *one file* go up in
+		    parallel ("workers per box").
+		  - ``file_workers``   = how many *different files* go up in
+		    parallel when ``file_path`` is a directory ("how many boxes at
+		    once"). Ignored for single-file uploads.
+
+		Total in-flight HTTP PUTs is roughly
+		``file_workers * upload_workers``. Don't go much above ~32 or
+		figshare will start throttling with 429s.
+
 		Parameters
 		----------
 		article_id : int
@@ -700,12 +723,10 @@ class Figshare:
 			If True, replace remote files of the same name. Files whose md5
 			and size already match the remote copy are still skipped.
 		file_workers : int
-			Number of **threads** (``ThreadPoolExecutor``) used to upload
-			*different files* concurrently when ``file_path`` is a directory.
-			Ignored for single-file uploads. Each file additionally uses
-			``self.upload_workers`` threads internally for its own parts, so
-			the maximum number of in-flight HTTP PUTs is roughly
-			``file_workers * upload_workers``.
+			How many *different files* to upload at the same time when
+			``file_path`` is a directory (default 1 = serial). Use a higher
+			value when uploading many small files; for a few big files, raise
+			``upload_workers`` instead. Ignored for single-file uploads.
 		"""
 		if os.path.isdir(file_path):
 			if file_workers and file_workers > 1:
@@ -833,14 +854,18 @@ def upload(
 	overwrite : bool
 		Replace remote files of the same name (md5+size match still skips).
 	upload_workers : int
-		Number of threads per file for part-level uploads (inner pool).
+		**Inner pool** — threads PUTting the parts of *one* file in
+		parallel ("workers per box"). Default 4.
 	max_retries : int
 		Retries per part on transient errors (5xx / 429 / connection).
 	file_workers : int
-		Number of threads uploading *different files* concurrently (outer
-		pool); only used when ``input_path`` resolves to multiple files.
-		The total number of in-flight PUTs is approximately
-		``file_workers * upload_workers``.
+		**Outer pool** — threads uploading *different files* in parallel
+		when the input expands to multiple files ("how many boxes at
+		once"). Default 1 (serial). Use ``-W`` for many small files;
+		use ``-w`` (``upload_workers``) for a few big files. The total
+		number of simultaneous HTTP PUTs is roughly
+		``file_workers * upload_workers`` — keep this under ~32 to avoid
+		rate-limit (429) responses from figshare.
 	mid_publish : bool
 		If True, auto-publish in the middle of an upload when the quota would
 		overflow. Default False (safer).
