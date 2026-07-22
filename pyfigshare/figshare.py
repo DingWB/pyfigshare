@@ -14,7 +14,7 @@ import stat
 import time
 import random
 import threading
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import pandas as pd
@@ -51,6 +51,37 @@ def _redact_body(content: bytes, token: Optional[str]) -> str:
 	if token:
 		text = text.replace(token, "<REDACTED>")
 	return text[:2000]
+
+
+def _new_md5():
+	"""Return a new md5 hasher, flagged as not-for-security where supported.
+
+	``usedforsecurity=False`` (Python 3.9+) lets the hash work on FIPS-mode
+	systems where md5 is otherwise disabled; figshare only uses it as a
+	content checksum, never for security.
+	"""
+	try:
+		return hashlib.md5(usedforsecurity=False)
+	except TypeError:  # pragma: no cover - Python < 3.9
+		return hashlib.md5()
+
+
+def _compute_md5(path: str, chunk_size: int) -> Tuple[str, int]:
+	"""Return ``(md5_hexdigest, size_in_bytes)`` for ``path``.
+
+	The file is read in ``chunk_size`` byte blocks so arbitrarily large files
+	are hashed with bounded memory.
+	"""
+	md5 = _new_md5()
+	size = 0
+	with open(path, "rb") as fin:
+		while True:
+			data = fin.read(chunk_size)
+			if not data:
+				break
+			size += len(data)
+			md5.update(data)
+	return md5.hexdigest(), size
 
 
 def download_worker(url: str, path: str, token: Optional[str] = None) -> str:
@@ -197,22 +228,52 @@ class Figshare:
 				"consider `chmod 600` to protect it."
 			)
 
-	def raw_issue_request(self, method, url, data=None, binary=False):
+	def raw_issue_request(self, method, url, data=None, binary=False, retry=True):
 		# Authorization header is set on the session; no need to repeat it here.
 		if data is not None and not binary:
 			data = json.dumps(data)
-		response = self.session.request(method, url, data=data)
-		try:
-			response.raise_for_status()
+		# Retry transient failures (5xx / 429 / connection drops) with the same
+		# exponential backoff used for part uploads. Callers that run their own
+		# retry loop (e.g. part PUTs) pass ``retry=False`` to avoid nesting.
+		attempts = self.max_retries + 1 if retry else 1
+		last_exc: Optional[BaseException] = None
+		for attempt in range(attempts):
+			wait_override: Optional[float] = None
 			try:
-				parsed = json.loads(response.content)
-			except ValueError:
-				parsed = response.content
-		except HTTPError as error:
-			logger.warning(error)
-			logger.debug(f"Body: {_redact_body(response.content, self.token)}")
-			raise
-		return parsed
+				response = self.session.request(method, url, data=data)
+				try:
+					response.raise_for_status()
+				except HTTPError as error:
+					resp = getattr(error, "response", response)
+					status = getattr(resp, "status_code", None)
+					if retry and status is not None and (status >= 500 or status == 429):
+						wait_override = self._retry_after(resp)
+						last_exc = error
+					else:
+						logger.warning(error)
+						logger.debug(f"Body: {_redact_body(response.content, self.token)}")
+						raise
+				else:
+					try:
+						return json.loads(response.content)
+					except ValueError:
+						return response.content
+			except (requests.ConnectionError, requests.Timeout) as error:
+				if not retry:
+					raise
+				last_exc = error
+			if attempt < attempts - 1:
+				if wait_override is not None:
+					delay = wait_override + random.uniform(0, 0.5)
+				else:
+					delay = self.retry_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+				logger.warning(
+					f"request {method} {url} failed "
+					f"(attempt {attempt + 1}/{attempts}): {last_exc}; retrying in {delay:.1f}s"
+				)
+				time.sleep(delay)
+		assert last_exc is not None
+		raise last_exc
 
 	def _retry_after(self, response: "requests.Response") -> Optional[float]:
 		hdr = response.headers.get("Retry-After") if response is not None else None
@@ -249,8 +310,22 @@ class Figshare:
 				logger.info('  {id} - {name}'.format(**item))
 		return request['files']
 
-	def list_articles(self,show=False):
-		result = self.issue_request('GET', "account/articles")
+	def list_articles(self, show=False, page_size=100):
+		# The figshare API paginates account/articles (default page size is
+		# small), so walk every page until a short/empty page is returned;
+		# otherwise callers like search/delete-by-title silently miss articles.
+		result: List[Dict[str, Any]] = []
+		page = 1
+		while True:
+			batch = self.issue_request(
+				'GET', "account/articles?page={}&page_size={}".format(page, page_size)
+			)
+			if not batch:
+				break
+			result.extend(batch)
+			if len(batch) < page_size:
+				break
+			page += 1
 		if show:
 			logger.info('Listing current articles:')
 			if result:
@@ -446,8 +521,10 @@ class Figshare:
 		body = {}
 		for key in valid_keys:
 			body[key] = kwargs[key]
+		# ``raw_issue_request`` already json-encodes dict bodies, so pass the
+		# dict directly (encoding it here too would double-encode the JSON).
 		result = self.issue_request('PUT', 'account/articles/{}'.format(article_id),
-									data=json.dumps(body))
+									data=body)
 		return result
 
 	def list_article_versions(self, article_id, private=None):
@@ -524,7 +601,7 @@ class Figshare:
 					token,
 				)
 		else:
-			with ProcessPoolExecutor(cpu) as executor:
+			with ThreadPoolExecutor(max_workers=cpu) as executor:
 				futures = {}
 				for file_dict in file_list:
 					future = executor.submit(
@@ -541,15 +618,7 @@ class Figshare:
 					logger.info(file_name)
 
 	def get_file_check_data(self, file_name):
-		with open(file_name, 'rb') as fin:
-			md5 = hashlib.md5()
-			size = 0
-			data = fin.read(self.chunk_size)
-			while data:
-				size += len(data)
-				md5.update(data)
-				data = fin.read(self.chunk_size)
-			return md5.hexdigest(), size
+		return _compute_md5(file_name, self.chunk_size)
 
 	def initiate_new_upload(self, article_id, file_path,folder_name=None,overwrite=False):
 		basename = os.path.basename(file_path) #.replace(' ','_')
@@ -564,10 +633,11 @@ class Figshare:
 		md5, size = self.get_file_check_data(file_path)
 		if size == 0:
 			return False
-		if name in self.existed_files:
+		with self._existed_files_lock:
+			remote = self.existed_files.get(name)
+		if remote is not None:
 			if not overwrite:
 				return None
-			remote = self.existed_files[name]
 			remote_md5 = remote.get('md5') if isinstance(remote, dict) else None
 			remote_size = remote.get('size') if isinstance(remote, dict) else None
 			if remote_md5 and remote_md5 == md5 and remote_size == size:
@@ -579,7 +649,8 @@ class Figshare:
 				self.delete_file(article_id, old_file_id)
 			except Exception as e:
 				logger.warning(f"Failed to delete existing file {name}: {e}")
-			del self.existed_files[name]
+			with self._existed_files_lock:
+				self.existed_files.pop(name, None)
 		endpoint = 'account/articles/{}/files'.format(article_id)
 		# check whether there is enough quota before initiating new upload
 		if self.mid_publish:
@@ -645,7 +716,7 @@ class Figshare:
 		for attempt in range(self.max_retries + 1):
 			wait_override: Optional[float] = None
 			try:
-				self.raw_issue_request('PUT', url, data=data, binary=True)
+				self.raw_issue_request('PUT', url, data=data, binary=True, retry=False)
 				return
 			except HTTPError as e:
 				resp = getattr(e, 'response', None)
@@ -997,18 +1068,6 @@ def _dry_run_report(input_files, target_folder, chunk_size):
 				for f in files:
 					yield os.path.join(root, f)
 
-	def _md5(path, chunk):
-		h = hashlib.md5()
-		size = 0
-		with open(path, "rb") as fh:
-			while True:
-				buf = fh.read(chunk)
-				if not buf:
-					break
-				size += len(buf)
-				h.update(buf)
-		return h.hexdigest(), size
-
 	chunk = chunk_size * 1024 * 1024
 	total = 0
 	sys.stdout.write("path\tremote_name\tsize\tmd5\n")
@@ -1017,7 +1076,7 @@ def _dry_run_report(input_files, target_folder, chunk_size):
 			rel = os.path.relpath(p, os.path.dirname(base)) if os.path.isdir(base) else os.path.basename(p)
 			rel = rel.replace(os.sep, "/")
 			name = f"{target_folder}/{rel}" if target_folder else rel
-			md5, size = _md5(p, chunk)
+			md5, size = _compute_md5(p, chunk)
 			total += size
 			sys.stdout.write(f"{p}\t{name}\t{size}\t{md5}\n")
 	logger.info(f"dry-run total: {total/1024/1024:.1f} MiB")
@@ -1058,12 +1117,11 @@ def download(article_id,private=False, outdir="./",cpu=1,folder=None,file_id=Non
 	"""
 	Download all files for a given figshare article id.
 
-	Unlike :func:`upload`, downloads use a ``ProcessPoolExecutor`` (true
-	processes, hence the ``cpu`` parameter name) because each file is
-	fetched independently with a streaming ``requests`` GET and there is
-	no shared HTTP session to benefit from threads. Private (unpublished)
-	files are fetched with the account token; public files download
-	anonymously.
+	Downloads run in a ``ThreadPoolExecutor`` (the ``cpu`` parameter is the
+	worker count) because fetching each file is network-I/O bound: threads
+	avoid process-spawn/pickling overhead and release the GIL while blocked on
+	the socket. Private (unpublished) files are fetched with the account
+	token; public files download anonymously.
 
 	Parameters
 	----------
@@ -1075,7 +1133,7 @@ def download(article_id,private=False, outdir="./",cpu=1,folder=None,file_id=Non
 	outdir : path
 		directory where downloaded files will be written.
 	cpu : int
-		Number of **processes** to use for parallel downloads (default 1).
+		Number of **threads** to use for parallel downloads (default 1).
 	folder : str, optional
 		If set, only download files whose top-level remote folder equals
 		this name.
