@@ -97,6 +97,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         outdir=args.outdir,
         cpu=args.cpu,
         folder=args.folder,
+        file_id=args.file_id,
     )
     return 0
 
@@ -318,6 +319,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Number of parallel download workers (default: 1).")
     p.add_argument("--folder", default=None,
                    help="Only download files under this top-level folder.")
+    p.add_argument("--file_id", default=None,
+                   help="Only download the file(s) with these figshare file id(s); "
+                        "a single id or a comma-separated list, e.g. '123,456'.")
     p.set_defaults(func=cmd_download)
 
     # list-files

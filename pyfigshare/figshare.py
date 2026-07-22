@@ -16,7 +16,6 @@ import random
 import threading
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
-from urllib.request import urlretrieve
 
 import pandas as pd
 import requests
@@ -54,14 +53,26 @@ def _redact_body(content: bytes, token: Optional[str]) -> str:
 	return text[:2000]
 
 
-def download_worker(url: str, path: str) -> str:
+def download_worker(url: str, path: str, token: Optional[str] = None) -> str:
 	dirname = os.path.dirname(path)
 	if dirname and not os.path.exists(dirname):
 		os.makedirs(dirname, exist_ok=True)
 	if os.path.exists(path):
 		logger.info(f"{path} existed")
 		return path
-	urlretrieve(url, path)
+	# Private/unpublished files require the token; public files ignore it.
+	headers = {"Authorization": f"token {token}"} if token else None
+	# Download to a temporary ".part" file first and atomically rename on
+	# success, so an interrupted transfer never leaves a truncated file that
+	# a later run would mistake for a completed download.
+	tmp_path = path + ".part"
+	with requests.get(url, headers=headers, stream=True) as resp:
+		resp.raise_for_status()
+		with open(tmp_path, "wb") as fout:
+			for chunk in resp.iter_content(chunk_size=1024 * 1024):
+				if chunk:
+					fout.write(chunk)
+	os.replace(tmp_path, path)
 	return path
 
 class Figshare:
@@ -129,11 +140,17 @@ class Figshare:
 				self._warn_if_token_world_readable(self.token_path)
 				with open(self.token_path, 'r') as f:
 					token = f.read().strip()
-			else:
-				raise ValueError(
-					"No figshare token provided. Pass `token=...`, set the "
-					"FIGSHARE_TOKEN env var, or run `figshare set-token`."
-				)
+		# A token is only required for private/account endpoints (uploads,
+		# private articles). Public reads/downloads of published articles work
+		# anonymously, so we only error out when private access is requested
+		# without a token.
+		if token is None and private:
+			raise ValueError(
+				"No figshare token provided. Pass `token=...`, set the "
+				"FIGSHARE_TOKEN env var, or run `figshare set-token`. "
+				"A token is not needed for downloading published (public) "
+				"articles; pass `private=False` in that case."
+			)
 		self.token = token
 		self.private = private
 		self.chunk_size = int(chunk_size) * 1024 * 1024
@@ -165,7 +182,8 @@ class Figshare:
 		adapter = HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
 		self.session.mount("https://", adapter)
 		self.session.mount("http://", adapter)
-		self.session.headers.update({"Authorization": f"token {self.token}"})
+		if self.token:
+			self.session.headers.update({"Authorization": f"token {self.token}"})
 
 	@staticmethod
 	def _warn_if_token_world_readable(path):
@@ -468,45 +486,58 @@ class Figshare:
 		response = self.issue_request('GET', endpoint)
 		return response
 
-	def download_article(self, article_id, outdir="./",cpu=1,folder=None):
+	def download_article(self, article_id, outdir="./",cpu=1,folder=None,file_id=None):
 		outdir=os.path.abspath(os.path.expanduser(outdir))
 		# Get list of files
 		file_list = self.list_files(article_id,show=False)
-		# Prepare headers for private downloads
-		# headers = {'Authorization': 'token ' + self.token} if self.private else None
+		# Optionally restrict to one or more files by their figshare file ids.
+		# `file_id` may be a single id, a list/tuple of ids, or a comma-separated
+		# string such as "123,456".
+		if file_id is not None:
+			if isinstance(file_id, str):
+				ids = [p.strip() for p in file_id.split(',') if p.strip()]
+			elif isinstance(file_id, (list, tuple, set)):
+				ids = list(file_id)
+			else:
+				ids = [file_id]
+			wanted = {int(i) for i in ids}
+			file_list = [f for f in file_list if int(f['id']) in wanted]
+			found = {int(f['id']) for f in file_list}
+			missing = wanted - found
+			if missing:
+				raise ValueError(
+					f"file_id(s) {sorted(missing)} not found in article {article_id}"
+				)
+		# Restrict to a single top-level remote folder, if requested.
+		if folder is not None:
+			file_list = [f for f in file_list if f['name'].split('/')[0] == folder]
 		os.makedirs(outdir, exist_ok=True) # This might require Python >=3.2
+		# A token is only sent for private (unpublished) downloads; public
+		# files are fetched anonymously.
+		token = self.token if self.private else None
 		if cpu==1:
 			for file_dict in file_list:
-				if not folder is None and folder!=file_dict['name'].split('/')[0]:
-					continue
-				path=os.path.join(outdir, file_dict['name'])
-				dirname= os.path.dirname(path)
-				if not os.path.exists(dirname):
-					os.makedirs(dirname,exist_ok=True)
-				if os.path.exists(path):
-					logger.info(f"{path} existed")
-					continue
 				logger.info(file_dict['name'])
-				# url=file_dict['download_url'] if not self.private else f"https://figshare.com/ndownloader/files/{file_dict['id']}"
-				# download with optional Authorization header for private files
-				download_worker(file_dict['download_url'], path)
+				download_worker(
+					file_dict['download_url'],
+					os.path.join(outdir, file_dict['name']),
+					token,
+				)
 		else:
 			with ProcessPoolExecutor(cpu) as executor:
 				futures = {}
 				for file_dict in file_list:
-					if not folder is None and folder!=file_dict['name'].split('/')[0]:
-						continue
-					# url=file_dict['download_url'] if not self.private else f"https://figshare.com/ndownloader/files/{file_dict['id']}"
 					future = executor.submit(
 						download_worker,
 						file_dict['download_url'],
 						os.path.join(outdir, file_dict['name']),
+						token,
 					)
 					futures[future] = file_dict['name']
 
 				for future in as_completed(futures):
 					file_name = futures[future]
-					path = future.result()
+					future.result()
 					logger.info(file_name)
 
 	def get_file_check_data(self, file_name):
@@ -1023,14 +1054,16 @@ def list_files(article_id,private=False,version=None,output=None):
 	else:
 		df.to_csv(sys.stdout, sep='\t', index=False)
 
-def download(article_id,private=False, outdir="./",cpu=1,folder=None):
+def download(article_id,private=False, outdir="./",cpu=1,folder=None,file_id=None):
 	"""
 	Download all files for a given figshare article id.
 
 	Unlike :func:`upload`, downloads use a ``ProcessPoolExecutor`` (true
 	processes, hence the ``cpu`` parameter name) because each file is
-	fetched with ``urllib.request.urlretrieve`` independently and there is
-	no shared HTTP session to benefit from threads.
+	fetched independently with a streaming ``requests`` GET and there is
+	no shared HTTP session to benefit from threads. Private (unpublished)
+	files are fetched with the account token; public files download
+	anonymously.
 
 	Parameters
 	----------
@@ -1046,9 +1079,13 @@ def download(article_id,private=False, outdir="./",cpu=1,folder=None):
 	folder : str, optional
 		If set, only download files whose top-level remote folder equals
 		this name.
+	file_id : int, str, or list, optional
+		If set, only download the file(s) with these figshare file id(s).
+		Accepts a single id, a list/tuple of ids, or a comma-separated
+		string such as ``"123,456"``.
 	"""
 	fs = Figshare(private=private)
-	fs.download_article(article_id, outdir=outdir,cpu=cpu,folder=folder)
+	fs.download_article(article_id, outdir=outdir,cpu=cpu,folder=folder,file_id=file_id)
 
 if __name__ == "__main__":
 	from .cli import main
