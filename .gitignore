@@ -4,3 +4,4 @@
 /dist/
 /.idea/
 /pyfigshare/_version.py
+/pyfigshare/__pycache__/
