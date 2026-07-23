@@ -1113,7 +1113,7 @@ def list_files(article_id,private=False,version=None,output=None):
 	else:
 		df.to_csv(sys.stdout, sep='\t', index=False)
 
-def download(article_id,private=False, outdir="./",cpu=1,folder=None,file_id=None):
+def download(article_id, private=False, outdir="./",cpu=1,folder=None,file_id=None):
 	"""
 	Download all files for a given figshare article id.
 

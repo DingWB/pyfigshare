@@ -5,3 +5,6 @@
 /.idea/
 /pyfigshare/_version.py
 /pyfigshare/__pycache__/
+pyfigshare/__pycache__/figshare.cpython-311.pyc
+pyfigshare/__pycache__/figshare.cpython-311.pyc
+figshare.tsv
