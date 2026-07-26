@@ -17,7 +17,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
-import pandas as pd
 import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError
@@ -1099,6 +1098,8 @@ def list_files(article_id,private=False,version=None,output=None):
 	-------
 
 	"""
+	import pandas as pd  # lazy import: keeps CLI startup fast
+
 	fs = Figshare(private=private)
 	# fs.get_article(article_id) #article_id=9273710
 	# generating the mapping file from file id to file name
